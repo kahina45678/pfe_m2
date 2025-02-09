@@ -3,41 +3,74 @@
     <div class="content-section">
         <form method="POST" action="">
             {{ form.hidden_tag() }}
+            
             <fieldset class="form-group">
-                <legend class="border-bottom mb-4">New Post</legend>
+                <legend class="border-bottom mb-4">Créer un Nouveau Quiz</legend>
                 <div class="form-group">
-                    {{ form.title.label(class="form-control-label") }}
-                    {% if form.title.errors %}
-                        {{ form.title(class="form-control form-control-lg is-invalid") }}
+                    {{ titre_form.titre.label(class="form-control-label") }}
+                    {% if titre_form.titre.errors %}
+                        {{ titre_form.titre(class="form-control form-control-lg is-invalid") }}
                         <div class="invalid-feedback">
-                            {% for error in form.title.errors %}
+                            {% for error in titre_form.titre.errors %}
                                 <span>{{ error }}</span>
                             {% endfor %}
                         </div>
                     {% else %}
-                        {{ form.title(class="form-control form-control-lg") }}
+                        {{ titre_form.titre(class="form-control form-control-lg") }}
                     {% endif %}
                 </div>
-            </fieldset>
+                
+                <!-- <a href="{{ url_for('newPost', quiz_id=quiz_id, titre=titre) }}" class="btn btn-primary">Suivant</a> -->
 
+            </fieldset>
             <fieldset class="form-group">
+                <legend class="border-bottom mb-4">Question {{ cpt + 1 }} / 40</legend>
+
                 <div class="form-group">
-                    {{ form.text.label(class="form-control-label") }}
-                    {% if form.text.errors %}
-                        {{ form.text(class="form-control form-control-lg is-invalid") }}
-                        <div class="invalid-feedback">
-                            {% for error in form.text.errors %}
-                                <span>{{ error }}</span>
-                            {% endfor %}
-                        </div>
-                    {% else %}
-                        {{ form.text(class="form-control form-control-lg") }}
-                    {% endif %}
+                    {{ form.question.label(class="form-control-label") }}
+                    {{ form.question(class="form-control", value=questions[cpt]['question']) }}
+                </div>
+
+                <div class="form-group">
+                    {{ form.type_question.label(class="form-control-label") }}
+                    {{ form.type_question(class="form-control", value=questions[cpt]['type_question']) }}
+                </div>
+
+                <div class="form-group">
+                    {{ form.reponse_1.label(class="form-control-label") }}
+                    {{ form.reponse_1(class="form-control", value=questions[cpt]['reponse_1']) }}
+                </div>
+
+                <div class="form-group">
+                    {{ form.reponse_2.label(class="form-control-label") }}
+                    {{ form.reponse_2(class="form-control", value=questions[cpt]['reponse_2']) }}
+                </div>
+
+                <div class="form-group">
+                    {{ form.reponse_3.label(class="form-control-label") }}
+                    {{ form.reponse_3(class="form-control", value=questions[cpt]['reponse_3']) }}
+                </div>
+
+                <div class="form-group">
+                    {{ form.reponse_4.label(class="form-control-label") }}
+                    {{ form.reponse_4(class="form-control", value=questions[cpt]['reponse_4']) }}
+                </div>
+
+                <div class="form-group">
+                    {{ form.bonne_reponse.label(class="form-control-label") }}
+                    {{ form.bonne_reponse(class="form-control", value=questions[cpt]['bonne_reponse']) }}
+                </div>
+
+                <div class="form-check">
+                    {{ form.compte_double(class="form-check-input") }}
+                    {{ form.compte_double.label(class="form-check-label") }}
                 </div>
             </fieldset>
 
             <div class="form-group">
-                {{ form.submit(class="btn btn-outline-info") }}
+                <button type="submit" name="submit_prev" class="btn btn-secondary">Précédent</button>
+                <button type="submit" name="submit_next" class="btn btn-primary">Suivant</button>
+                <button type="submit" name="submit_validate" class="btn btn-success">Valider le Quiz</button>
             </div>
         </form>
     </div>

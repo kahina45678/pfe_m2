@@ -91,12 +91,12 @@ First time setup in your local environment
 
 -   Make sure you have a `GitHub account`_.
 -   Download and install the `latest version of git`_.
--   Configure git with your `username`_ and `email`_.
+-   Configure git with your `username`_ and `adresse_mail`_.
 
     .. code-block:: text
 
         $ git config --global user.name 'your name'
-        $ git config --global user.email 'your email'
+        $ git config --global user.adresse_mail 'your adresse_mail'
 
 -   Fork Flask to your GitHub account by clicking the `Fork`_ button.
 -   `Clone`_ your fork locally, replacing ``your-username`` in the command below with
@@ -139,7 +139,7 @@ First time setup in your local environment
 .. _GitHub account: https://github.com/join
 .. _latest version of git: https://git-scm.com/downloads
 .. _username: https://docs.github.com/en/github/using-git/setting-your-username-in-git
-.. _email: https://docs.github.com/en/github/setting-up-and-managing-your-github-user-account/setting-your-commit-email-address
+.. _adresse_mail: https://docs.github.com/en/github/setting-up-and-managing-your-github-user-account/setting-your-commit-adresse_mail-address
 .. _Fork: https://github.com/pallets/flask/fork
 .. _Clone: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo#step-2-create-a-local-clone-of-your-fork
 

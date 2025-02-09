@@ -1,0 +1,30 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div class="content-section">
+        <form method="POST" action="">
+            <!-- {{ form.hidden_tag() }} -->
+            
+            <fieldset class="form-group">
+                <legend class="border-bottom mb-4">Créer un Nouveau Quiz</legend>
+                <div class="form-group">
+                    {{ form.titre.label(class="form-control-label") }}
+                    {% if form.titre.errors %}
+                        {{ form.titre(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.titre.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.titre(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                
+                <a href="{{ url_for('newPost', quiz_id=quiz_id, titre=titre) }}" class="btn btn-primary">Suivant</a>
+
+            </fieldset>
+
+           
+        </form>
+    </div>
+{% endblock content %}

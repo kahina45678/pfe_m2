@@ -513,7 +513,7 @@ Logging
 -------
 
 See :doc:`/logging` for information about how to log exceptions, such as
-by emailing them to admins.
+by adresse_mailing them to admins.
 
 
 Debugging

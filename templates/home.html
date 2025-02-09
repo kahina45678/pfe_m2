@@ -1,32 +1,28 @@
-
 {% extends "layout.html" %}
 {% block content %}
-    <h1>Publications</h1>
-    {% for post in posts %}
-        <article class="media content-section">
-         
-          <div class="media-body">
-            <div>
-              <h2>{{ post.author }}</h2>
-              
-            </div>
-            <div class="article-metadata">
+    <h1>Mes Quiz</h1>
 
-              <a class="mr-2" href="#">{{ post.title }}</a>
-              <small class="text-muted">{{ post.date }}</small>
-            </div>
-            
-            <p class="article-content">{{ post.text }}</p>
-            {% if post.email == session['email'] %}
-              <a href="{{ url_for('edit_post', post_id=post.id) }}" class="btn btn-primary">Modifier</a>
-              <a href="{{ url_for('delete_post', post_id=post.id) }}" class="btn btn-danger">Supprimer</a>
-            
-            
-            {% endif %}
-
-          
-          </div>
-
-        </article>
-    {% endfor %}
+    
+    
+    {% if quizzes %}
+        {% for quiz in quizzes %}
+            <article class="media content-section">
+                <div class="media-body">
+                    <h2>{{ quiz.nom }}</h2>
+                    <div class="article-metadata">
+                        <a class="mr-2" href="#">{{ quiz.author_nom }} {{ quiz.author_prenom }}</a> 
+                        <small class="text-muted">Créé le : {{ quiz.date_creation }}</small> 
+                        
+                        {% if quiz.adresse_mail == session['adresse_mail'] %}
+                            <a href="{{ url_for('edit_post', quiz_id=quiz.id_quiz) }}" class="btn btn-primary">Modifier</a>
+                            <a href="{{ url_for('delete_post', quiz_id=quiz.id_quiz) }}" class="btn btn-danger">Supprimer</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </article>
+        {% endfor %}
+    {% else %}
+        <p>Aucun quiz trouvé.</p>  
+    {% endif %}
 {% endblock content %}
+

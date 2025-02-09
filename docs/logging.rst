@@ -78,7 +78,7 @@ handler, you can import and remove it::
     app.logger.removeHandler(default_handler)
 
 
-Email Errors to Admins
+adresse_mail Errors to Admins
 ----------------------
 
 When running the application on a remote server for production, you probably
@@ -87,7 +87,7 @@ send log messages to a file, and you'll only check that file if a user tells
 you something went wrong.
 
 To be proactive about discovering and fixing bugs, you can configure a
-:class:`logging.handlers.SMTPHandler` to send an email when errors and higher
+:class:`logging.handlers.SMTPHandler` to send an adresse_mail when errors and higher
 are logged. ::
 
     import logging

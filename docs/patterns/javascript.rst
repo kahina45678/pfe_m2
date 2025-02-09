@@ -214,7 +214,7 @@ dict from the view. It will be serialized to JSON automatically.
         user = User.query.get_or_404(id)
         return {
             "username": User.username,
-            "email": User.email,
+            "adresse_mail": User.adresse_mail,
             "picture": url_for("static", filename=f"users/{id}/profile.png"),
         }
 
