@@ -65,9 +65,9 @@
             <p class='text-muted'>You can put any information here you'd like.
               <ul class="list-group">
                 {% if session['logged_in'] %}
-                  <li class="list-group-item list-group-item-light success vert"><a class="ml-2 vert" href="{{ url_for('newPost') }}">New Post</a></li>
+                  <li class="list-group-item list-group-item-light success vert"><a class="ml-2 vert" href="{{ url_for('newPost') }}">New Quiz</a></li>
                 {% else %}
-                  <li class="list-group-item list-group-item-light success"><a class="ml-2" href="{{ url_for('login') }}">login to create new posts</a></li>
+                  <li class="list-group-item list-group-item-light success"><a class="ml-2" href="{{ url_for('login') }}">login to create new quizzes</a></li>
                 {% endif %}
 
                 <li class="list-group-item list-group-item-light">Announcements</li>
