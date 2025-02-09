@@ -4,7 +4,7 @@ version = "1.1.0"
 description = "Demonstrates making AJAX requests to Flask."
 readme = "README.rst"
 license = {file = "LICENSE.rst"}
-maintainers = [{name = "Pallets", email = "contact@palletsprojects.com"}]
+maintainers = [{name = "Pallets", adresse_mail = "contact@palletsprojects.com"}]
 dependencies = ["flask"]
 
 [project.urls]

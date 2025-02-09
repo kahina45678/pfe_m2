@@ -1579,7 +1579,7 @@ class Flask(Scaffold):
         will prepend the blueprint's name separated by a ``.`` to the
         endpoint.
 
-        In some cases, such as email messages, you want URLs to include
+        In some cases, such as adresse_mail messages, you want URLs to include
         the scheme and domain, like ``https://example.com/hello``. When
         not in an active request, URLs will be external by default, but
         this requires setting :data:`SERVER_NAME` so Flask knows what

@@ -4,7 +4,7 @@ version = "1.0.0"
 description = "The basic blog app built in the Flask tutorial."
 readme = "README.rst"
 license = {text = "BSD-3-Clause"}
-maintainers = [{name = "Pallets", email = "contact@palletsprojects.com"}]
+maintainers = [{name = "Pallets", adresse_mail = "contact@palletsprojects.com"}]
 dependencies = [
     "flask",
 ]

@@ -76,11 +76,11 @@ Here is an example model (put this into :file:`models.py`, e.g.)::
         __tablename__ = 'users'
         id = Column(Integer, primary_key=True)
         name = Column(String(50), unique=True)
-        email = Column(String(120), unique=True)
+        adresse_mail = Column(String(120), unique=True)
 
-        def __init__(self, name=None, email=None):
+        def __init__(self, name=None, adresse_mail=None):
             self.name = name
-            self.email = email
+            self.adresse_mail = adresse_mail
 
         def __repr__(self):
             return f'<User {self.name!r}>'
@@ -150,9 +150,9 @@ Here is an example table and model (put this into :file:`models.py`)::
     class User(object):
         query = db_session.query_property()
 
-        def __init__(self, name=None, email=None):
+        def __init__(self, name=None, adresse_mail=None):
             self.name = name
-            self.email = email
+            self.adresse_mail = adresse_mail
 
         def __repr__(self):
             return f'<User {self.name!r}>'
@@ -160,7 +160,7 @@ Here is an example table and model (put this into :file:`models.py`)::
     users = Table('users', metadata,
         Column('id', Integer, primary_key=True),
         Column('name', String(50), unique=True),
-        Column('email', String(120), unique=True)
+        Column('adresse_mail', String(120), unique=True)
     )
     mapper(User, users)
 
@@ -189,7 +189,7 @@ To insert data you can use the `insert` method.  We have to get a
 connection first so that we can use a transaction:
 
 >>> con = engine.connect()
->>> con.execute(users.insert(), name='admin', email='admin@localhost')
+>>> con.execute(users.insert(), name='admin', adresse_mail='admin@localhost')
 
 SQLAlchemy will automatically commit for us.
 

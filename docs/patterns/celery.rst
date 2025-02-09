@@ -2,7 +2,7 @@ Background Tasks with Celery
 ============================
 
 If your application has a long running task, such as processing some uploaded data or
-sending email, you don't want to wait for it to finish during a request. Instead, use a
+sending adresse_mail, you don't want to wait for it to finish during a request. Instead, use a
 task queue to send the necessary data to another process that will run the task in the
 background while the request returns immediately.
 
@@ -160,7 +160,7 @@ Here's an example task that adds two numbers together and returns the result.
 
 Earlier, we configured Celery to ignore task results by default. Since we want to know
 the return value of this task, we set ``ignore_result=False``. On the other hand, a task
-that didn't need a result, such as sending an email, wouldn't set this.
+that didn't need a result, such as sending an adresse_mail, wouldn't set this.
 
 
 Calling Tasks

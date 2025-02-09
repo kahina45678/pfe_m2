@@ -30,7 +30,7 @@ This is an example form for a typical registration page::
 
     class RegistrationForm(Form):
         username = StringField('Username', [validators.Length(min=4, max=25)])
-        email = StringField('Email Address', [validators.Length(min=6, max=35)])
+        adresse_mail = StringField('adresse_mail Address', [validators.Length(min=6, max=35)])
         password = PasswordField('New Password', [
             validators.DataRequired(),
             validators.EqualTo('confirm', message='Passwords must match')
@@ -47,7 +47,7 @@ In the view function, the usage of this form looks like this::
     def register():
         form = RegistrationForm(request.form)
         if request.method == 'POST' and form.validate():
-            user = User(form.username.data, form.email.data,
+            user = User(form.username.data, form.adresse_mail.data,
                         form.password.data)
             db_session.add(user)
             flash('Thanks for registering')
@@ -111,7 +111,7 @@ takes advantage of the :file:`_formhelpers.html` template:
     <form method=post>
       <dl>
         {{ render_field(form.username) }}
-        {{ render_field(form.email) }}
+        {{ render_field(form.adresse_mail) }}
         {{ render_field(form.password) }}
         {{ render_field(form.confirm) }}
         {{ render_field(form.accept_tos) }}
