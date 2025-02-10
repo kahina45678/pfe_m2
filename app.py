@@ -273,7 +273,7 @@ def about():
     return render_template('about.html', title='About')
 
 @app.route("/edit_post/<int:quiz_id>", methods=['GET', 'POST'])
-def edit_post(post_id):
+def edit_post(quiz_id):
     form = EditPostForm()
     
 
@@ -284,7 +284,7 @@ def edit_post(post_id):
 
     with sqlite3.connect("kahoot_clone.db") as con:
         cur = con.cursor()
-        cur.execute("SELECT * FROM post WHERE id = ?", (post_id,))
+        cur.execute("SELECT * FROM post WHERE id = ?", (quiz_id,))
         post = cur.fetchone()
 
         if post is None :
@@ -295,7 +295,7 @@ def edit_post(post_id):
        
         with sqlite3.connect("kahoot_clone.db") as con:
             cur = con.cursor()
-            cur.execute("UPDATE post SET title = ?, text = ? WHERE id = ?", (form.title.data, form.text.data, post_id))
+            cur.execute("UPDATE post SET title = ?, text = ? WHERE id = ?", (form.title.data, form.text.data, quiz_id))
             con.commit()
             flash('Le post a été modifié avec succès.', 'success')
             return redirect(url_for('home'))
@@ -306,11 +306,11 @@ def edit_post(post_id):
 
 
 @app.route("/delete_post/<int:quiz_id>", methods=['GET', 'POST'])
-def delete_post(post_id):
+def delete_post(quiz_id):
 
     with sqlite3.connect("kahoot_clone.db") as con:
         cur = con.cursor()
-        cur.execute("SELECT * FROM post WHERE id = ?", (post_id,))
+        cur.execute("SELECT * FROM quiz WHERE id_quiz = ?", (quiz_id,))
         post = cur.fetchone()
 
         if post is None:
@@ -320,12 +320,46 @@ def delete_post(post_id):
 
     with sqlite3.connect("kahoot_clone.db") as con:
         cur = con.cursor()
-        cur.execute("DELETE FROM post WHERE id = ?", (post_id,))
+        cur.execute("DELETE FROM quiz WHERE id_quiz = ?", (quiz_id,))
         con.commit()
         flash('Le post a été supprimé avec succès.', 'success')
     con.close()
 
     return redirect(url_for('home'))
+
+@app.route("/visualiser/<int:quiz_id>", methods=['GET', 'POST'])
+def visualiser(quiz_id):
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT type,quest,rep1,rep2,rep3,rep4,img,double FROM qst WHERE id_quiz = ?", (quiz_id,))
+        quests= cur.fetchall()
+        questions=[]
+        for q in quests: 
+            strct_quest = {
+                'type': q[0],
+                'quest': q[1],
+                'rep1': q[2],
+                'rep2': q[3],
+                'rep3': q[4],
+                'rep4': q[5],
+                'img': q[6],
+                'double': q[7],
+                
+            }
+            questions.append(strct_quest)
+            
+            
+            
+
+
+    con.close()
+    for i in range(len(questions)-1):
+        return render_template(str(questions[i]['type'])+'.html')
+
+        
+      
+
+        
 
 
 
