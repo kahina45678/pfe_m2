@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+{% block content %}
+    <h1>Mes Quiz</h1>
+
+    
+    
+    {% if quizzes %}
+        {% for quiz in quizzes %}
+            <article class="media content-section">
+                <div class="media-body">
+                    <h2>{{ quiz.nom }}</h2>
+                    <div class="article-metadata">
+                        <a class="mr-2" href="#">{{ quiz.author_nom }} {{ quiz.author_prenom }}</a> 
+                        <small class="text-muted">Créé le : {{ quiz.date_creation }}</small> 
+                        
+                        {% if quiz.adresse_mail == session['adresse_mail'] %}
+                            <a href="{{ url_for('edit_post', quiz_id=quiz.id_quiz) }}" class="btn btn-primary">Modifier</a>
+                            <a href="{{ url_for('delete_post', quiz_id=quiz.id_quiz) }}" class="btn btn-danger">Supprimer</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </article>
+        {% endfor %}
+    {% else %}
+        <p>Aucun quiz trouvé.</p>  
+    {% endif %}
+{% endblock content %}
+
