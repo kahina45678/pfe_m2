@@ -1,10 +1,13 @@
 from flask import Flask, render_template, url_for, flash, redirect,session,request
-from forms import RegistrationForm, LoginForm,UpdateAccount, NewQuestionForm,EditPostForm,TitreQuiz
+from forms import RegistrationForm, LoginForm,UpdateAccount, NewQuestionForm,EditPostForm,TitreQuiz,Pseudo_PinForm
 from flask_session import Session
 import sqlite3
 import os ,sys
 from werkzeug.utils import secure_filename
 from datetime import date
+from flask_socketio import join_room, leave_room, send, SocketIO
+import random
+from string import ascii_uppercase
 
 
 
@@ -17,9 +20,30 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 DEFAULT_PROFILE_IMAGE = 'smiley.jpg'
 
 Session(app)
+socketio = SocketIO(app, async_mode="gevent",cors_allowed_origins="*")
 
+rooms={}
+def generate_unique_code(length):
+    while True:
+        code = ""
+        for _ in range(length):
+            code += random.choice(ascii_uppercase)
+        
+        if code not in rooms:
+            break
+    
+    return code
 
 @app.route("/")
+@app.route("/base")
+def base():
+    
+    return render_template('base.html')
+
+
+
+
+
 @app.route("/home")
 def home():
     if 'logged_in' not in session or not session['logged_in']:
@@ -47,7 +71,7 @@ def home():
     with sqlite3.connect("kahoot_clone.db") as con:
         cur = con.cursor()
         cur.execute("""
-            SELECT quiz.id_quiz, quiz.nom, quiz.date_creation, user.nom, user.prenom, user.adresse_mail
+            SELECT DISTINCT quiz.id_quiz, quiz.nom, quiz.date_creation, user.nom, user.prenom, user.adresse_mail
             FROM quiz
             INNER JOIN user ON quiz.id_user = user.id_user
             WHERE quiz.id_user = ?
@@ -166,6 +190,11 @@ def account():
         return redirect(url_for('login'))
     
     return render_template('account.html', form=form, pdp=pdp)
+
+
+
+
+
 @app.route("/newPost", methods=['GET', 'POST'])
 def newPost():
     if 'logged_in' not in session or not session['logged_in']:
@@ -179,7 +208,7 @@ def newPost():
     form = NewQuestionForm()
     titre_form = TitreQuiz()
 
-    MAX_QUESTIONS = 40  # Limite à 40 questions
+    MAX_QUESTIONS = 40 
 
     if 'questions' not in session or len(session['questions']) < MAX_QUESTIONS:
         session['questions'] = [{"question": "", "type_question": "", "reponse_1": "", "reponse_2": "",
@@ -322,44 +351,144 @@ def delete_post(quiz_id):
         cur = con.cursor()
         cur.execute("DELETE FROM quiz WHERE id_quiz = ?", (quiz_id,))
         con.commit()
-        flash('Le post a été supprimé avec succès.', 'success')
+        flash('Le quiz a été supprimé avec succès.', 'success')
     con.close()
 
     return redirect(url_for('home'))
 
-@app.route("/visualiser/<int:quiz_id>", methods=['GET', 'POST'])
-def visualiser(quiz_id):
-    with sqlite3.connect("kahoot_clone.db") as con:
-        cur = con.cursor()
-        cur.execute("SELECT type,quest,rep1,rep2,rep3,rep4,img,double FROM qst WHERE id_quiz = ?", (quiz_id,))
-        quests= cur.fetchall()
-        questions=[]
-        for q in quests: 
-            strct_quest = {
-                'type': q[0],
-                'quest': q[1],
-                'rep1': q[2],
-                'rep2': q[3],
-                'rep3': q[4],
-                'rep4': q[5],
-                'img': q[6],
-                'double': q[7],
-                
-            }
-            questions.append(strct_quest)
-            
-            
-            
 
-
-    con.close()
-    for i in range(len(questions)-1):
-        return render_template(str(questions[i]['type'])+'.html')
 
         
       
+@app.route("/join", methods=["POST", "GET"])
+def join():
+    session.clear()
+    if request.method == "POST":
+        name = request.form.get("name")
+        code = request.form.get("code")
+        join = request.form.get("join", False)
+        print("Salle demandée :", code) 
 
-        
+        if not name:
+            return render_template("join.html", error="Please enter a name.", code=code, name=name)
+
+        if join and not code:
+            return render_template("join.html", error="Please enter a room code.", code=code, name=name)
+
+        room = code
+
+        if code not in rooms:
+            return render_template("join.html", error="Room does not exist.", code=code, name=name)
+
+        session["name"] = name
+        session["room"] = code
+        print(f"Utilisateur {name} rejoint la salle {session['room']}")
+
+        return redirect(url_for("room"))
+
+    return render_template("join.html")
+
+
+    
+@app.route("/room")
+def room():
+    room = session.get("room")
+    if room is None or session.get("name") is None or room not in rooms:
+        return redirect(url_for("home"))
+
+    return render_template("room.html", code=room, users=rooms[room]["users"])
+
+
+
+
+
+
+
+
+@app.route("/create_room/<int:quiz_id>", methods=["GET","POST"])
+def create_room(quiz_id):
+
+    room = generate_unique_code(5)
+    rooms[room] = {"members": 0, "messages": [], "users": []}  
+
+    # rooms[room] = {"members": 0, "messages": []}
+    print("Room créée :", room, rooms)
+    session["room"] = room
+    return render_template("create_room.html",room=session['room'])
+    
+
+
+@socketio.on("message")
+def message(data):
+    room = session.get("room")
+    if room not in rooms:
+        return 
+    
+    content = {
+        "name": session.get("name"),
+        "message": data["data"]
+    }
+    send(content, to=room)
+    rooms[room]["messages"].append(content)
+    print(f"{session.get('name')} said: {data['data']}")
+
+@socketio.on("connect")
+def connect(auth):
+    room = session.get("room")
+    name = session.get("name")
+    print(f"Tentative de connexion WebSocket: {name} dans {room}")
+    if not room or not name:
+        return
+    if room not in rooms:
+        leave_room(room)
+        return
+    
+    join_room(room)
+    send({"name": name, "message": "has entered the room"}, to=room)
+
+    rooms[room]["members"] += 1
+    if "users" not in rooms[room]:
+        rooms[room]["users"] = []
+    rooms[room]["users"].append(name) 
+
+    print(f"{name} joined room {room}")
+@socketio.on("join_room")
+def handle_join(data):
+    room = data["room"]
+    name = data["name"]
+    
+    print(f"🔥 WebSocket: {name} rejoint {room}")  # Debugging
+
+    if room not in rooms:
+        return
+    
+    join_room(room)
+    
+    rooms[room]["members"] += 1
+    rooms[room]["users"].append(name)
+
+    print(f"✅ {name} ajouté à {room}. Utilisateurs: {rooms[room]['users']}, Membres: {rooms[room]['members']}")
+
+    emit("update_users", {"users": rooms[room]["users"], "members": rooms[room]["members"]}, room=room)
+
+
+@socketio.on("disconnect")
+def disconnect():
+    room = session.get("room")
+    name = session.get("name")
+    leave_room(room)
+
+    if room in rooms:
+        rooms[room]["members"] -= 1
+        if name in rooms[room]["users"]:
+            rooms[room]["users"].remove(name)  # Retirer l'utilisateur de la liste
+
+        if rooms[room]["members"] <= 0:
+            del rooms[room]
+    
+    send({"name": name, "message": "has left the room"}, to=room)
+    print(f"{name} has left the room {room}")
+    
 
 
 

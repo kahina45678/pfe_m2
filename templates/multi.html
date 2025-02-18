@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quiz Multiplayer</title>
+    <script src="https://cdn.socket.io/4.4.1/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Bienvenue sur le Quiz</h1>
+    <button id="joinQuizBtn">Rejoindre un Quiz</button>
+    
+    <div id="pinEntry" style="display:none;">
+        <label for="pin">Entrez le code PIN :</label>
+        <input type="text" id="pin">
+        <button id="submitPin">Rejoindre</button>
+    </div>
+
+    <div id="quizContainer" style="display:none;">
+        <h2 id="questionText"></h2>
+        <div id="answerButtons"></div>
+    </div>
+
+    <script>
+        const socket = io.connect("http://127.0.0.1:5000");
+        let userId = Math.floor(Math.random() * 10000); // ID unique temporaire
+
+        document.getElementById("joinQuizBtn").addEventListener("click", function () {
+            document.getElementById("pinEntry").style.display = "block";
+        });
+
+        document.getElementById("submitPin").addEventListener("click", function () {
+            let pin = document.getElementById("pin").value;
+            socket.emit("join_quiz", { user_id: userId, pin: pin });
+        });
+
+        socket.on("quiz_started", function (data) {
+            document.getElementById("pinEntry").style.display = "none";
+            document.getElementById("quizContainer").style.display = "block";
+            loadQuestion(data.question);
+        });
+
+        function loadQuestion(question) {
+            document.getElementById("questionText").innerText = question.text;
+            let answersDiv = document.getElementById("answerButtons");
+            answersDiv.innerHTML = "";
+            question.choices.forEach(choice => {
+                let btn = document.createElement("button");
+                btn.innerText = choice;
+                btn.onclick = function () {
+                    let startTime = new Date().getTime();
+                    socket.emit("submit_answer", {
+                        user_id: userId,
+                        question_id: question.id,
+                        answer: choice,
+                        start_time: startTime
+                    });
+                };
+                answersDiv.appendChild(btn);
+            });
+        }
+
+        socket.on("answer_result", function (data) {
+            alert(data.is_correct ? "Bonne réponse ! 🎉" : "Mauvaise réponse ❌");
+            if (data.next_question) {
+                loadQuestion(data.next_question);
+            }
+        });
+    </script>
+</body>
+</html>

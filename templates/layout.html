@@ -35,8 +35,10 @@
               <a class="nav-item nav-link" href="{{ url_for('account') }}"><p>{{ session['adresse_mail'] }}</p></a>
             {% else %}
               <div class="navbar-nav">
+                <a class="nav-item nav-link" href="{{ url_for('join') }}">Rejoindre un quiz</a>
                 <a class="nav-item nav-link" href="{{ url_for('login') }}">Login</a>
                 <a class="nav-item nav-link" href="{{ url_for('register') }}">Register</a>
+                
               </div>
 
             {% endif %}

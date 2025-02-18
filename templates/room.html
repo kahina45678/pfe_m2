@@ -1,0 +1,26 @@
+{% extends 'base_cnx.html' %}
+{% block content %}
+
+<script>
+    var socket = io.connect(location.protocol + "//" + document.domain + ":" + location.port);
+
+    socket.on("connect", function() {
+        console.log("✅ Connecté au WebSocket");
+    });
+
+    socket.on("update_users", function(data) {
+        console.log("📝 Mise à jour des utilisateurs:", data);
+        document.getElementById("nb_users").innerText = data.members;
+    });
+</script>
+
+<div class="user-box">
+  <h2>Room: {{ code }}</h2>
+  <h3>Utilisateurs connectés : {{ users | length }}</h3>
+  <ul>
+    {% for user in users %}
+      <li>{{ user }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

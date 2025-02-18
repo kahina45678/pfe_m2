@@ -74,3 +74,14 @@ class EditPostForm(FlaskForm):
     title = StringField('Titre', validators=[DataRequired()])
     text = TextAreaField('Texte', validators=[DataRequired()])
     submit = SubmitField('Modifier le Post')
+
+
+class Pseudo_PinForm(FlaskForm):
+     pseudo = StringField('Pseudo', validators=[DataRequired()])
+     submit_pseudo=SubmitField('Valider le pseudo')
+     code_pin=StringField('Code_pin',
+                           validators=[DataRequired(), Length(8)])
+     submit_pin=SubmitField('Valider le code PIN')
+
+
+
