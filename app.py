@@ -357,6 +357,9 @@ def delete_post(quiz_id):
     return redirect(url_for('home'))
 
 
+@app.route("/cnx_reussie/<name>")
+def cnx_reussie(name):
+    return render_template("cnx_reussie.html", name=name)
 
         
       
@@ -383,8 +386,15 @@ def join():
         session["name"] = name
         session["room"] = code
         print(f"Utilisateur {name} rejoint la salle {session['room']}")
+        if name in rooms[room]["users"]:
+            return redirect(url_for('cnx_reussie',name=name))
+        rooms[room]["users"].append(name)
+        if name in rooms[room]['users']:
+            print("le pseudo est :                     ",name)
+            return redirect(url_for('cnx_reussie',name=name))
 
-        return redirect(url_for("room"))
+
+
 
     return render_template("join.html")
 
@@ -393,8 +403,6 @@ def join():
 @app.route("/room")
 def room():
     room = session.get("room")
-    if room is None or session.get("name") is None or room not in rooms:
-        return redirect(url_for("home"))
 
     return render_template("room.html", code=room, users=rooms[room]["users"])
 
@@ -414,6 +422,8 @@ def create_room(quiz_id):
     # rooms[room] = {"members": 0, "messages": []}
     print("Room créée :", room, rooms)
     session["room"] = room
+    if room:
+        return redirect(url_for("room"))
     return render_template("create_room.html",room=session['room'])
     
 
