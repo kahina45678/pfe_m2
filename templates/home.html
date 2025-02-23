@@ -1,0 +1,63 @@
+{% extends "base2.html" %}
+{% block content %}
+    <h1>Mes Quiz</h1>
+    
+    <style>
+      .row {
+          display: flex;
+          flex-wrap: nowrap;
+      }
+      .col-md-8 {
+          flex: 0 0 66.6667%;
+          margin-right: 120px;
+      }
+      .col-md-4 {
+          flex: 0 0 33.3333%;
+          margin-left: 120px;
+      }
+  </style>
+    <main role="main" class="container">
+        <div class="row ">
+            <div class="col-md-8 ">
+                {% if quizzes %}
+                {% for quiz in quizzes %}
+                <article class="media content-section">
+                    <div class="media-body">
+                        <h2>{{ quiz.nom }}</h2>
+                        <div class="article-metadata">
+                            <a class="mr-2" href="#">{{ quiz.author_nom }} {{ quiz.author_prenom }}</a> 
+                            <small class="text-muted">Créé le : {{ quiz.date_creation }}</small> 
+                        
+                            {% if quiz.adresse_mail == session['adresse_mail'] %}
+                            <a href="{{ url_for('edit_post', quiz_id=quiz.id_quiz) }}" class="btn btn-primary">Modifier</a>
+                            <a href="{{ url_for('delete_post', quiz_id=quiz.id_quiz) }}" class="btn btn-danger">Supprimer</a>
+                            <a href="{{ url_for('create_room', quiz_id=quiz.id_quiz) }}" class="btn btn-primary">Create a Room</a>
+                        
+                        
+                        
+                            {% endif %}
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+                {% else %}
+                <p>Aucun quiz trouvé.</p>  
+                {% endif %}
+            </div>
+            <div class="col-md-4">
+                <div class="content-section">
+                  <h3>Create you own quizzes !!</h3>
+                    <ul class="list-group">
+                      {% if session['logged_in'] %}   
+                        <a href="{{ url_for('newPost') }}" class="btn btn-primary">New Quiz</a>
+                      {% else %}
+                        <a href="{{ url_for('login') }}" class="btn btn-primary">login to create new quizzes</a>
+                      {% endif %}
+                    </ul>
+                  </p>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock content %}
+
