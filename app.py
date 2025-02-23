@@ -214,6 +214,9 @@ def newPost():
     if 'cpt' not in session:
         session['cpt'] = 0  
 
+    if 'quiz_created' not in session:
+        session['quiz_created'] = False
+
     titre = session.get('titre_quiz', "")  
     quiz_id = session.get('quiz_id', None)
 
@@ -221,22 +224,38 @@ def newPost():
         titre = titre_form.titre.data.strip()
         session['titre_quiz'] = titre
 
-        # Récupérer l'ID utilisateur
-        with sqlite3.connect("kahoot_clone.db") as con:
-            cur = con.cursor()
-            cur.execute('SELECT id_user FROM user WHERE adresse_mail=?', (session['adresse_mail'],))
-            user_id = cur.fetchone()
-            
-            if user_id:
-                user_id = user_id[0]
-                cur.execute('INSERT INTO quiz (id_user, nom) VALUES (?, ?)', (user_id, titre))
-                con.commit()
+        # Vérifier si le quiz a déjà été créé
+        if not session.get('quiz_created', False):
+            # Récupérer l'ID utilisateur
+            with sqlite3.connect("kahoot_clone.db") as con:
+                cur = con.cursor()
+                cur.execute('SELECT id_user FROM user WHERE adresse_mail=?', (session['adresse_mail'],))
+                user_id = cur.fetchone()
+                
+                if user_id:
+                    user_id = user_id[0]
 
-                cur.execute('SELECT id_quiz FROM quiz WHERE nom = ? AND id_user = ?', (titre, user_id))
-                quiz_id = cur.fetchone()[0]
-                session['quiz_id'] = quiz_id
+                    # Vérifier si un quiz avec le même nom existe déjà pour cet utilisateur
+                    cur.execute('SELECT id_quiz FROM quiz WHERE nom = ? AND id_user = ?', (titre, user_id))
+                    existing_quiz = cur.fetchone()
 
-                flash(f'Quiz "{titre}" créé avec succès !', 'success')
+                    if existing_quiz:
+                        flash(f'Un quiz avec le nom "{titre}" existe déjà.', 'danger')
+                    else:
+                        # Insérer le nouveau quiz
+                        try:
+                            cur.execute('INSERT INTO quiz (id_user, nom) VALUES (?, ?)', (user_id, titre))
+                            con.commit()
+
+                            # Récupérer l'ID du quiz nouvellement créé
+                            cur.execute('SELECT id_quiz FROM quiz WHERE nom = ? AND id_user = ?', (titre, user_id))
+                            quiz_id = cur.fetchone()[0]
+                            session['quiz_id'] = quiz_id
+                            session['quiz_created'] = True  # Marquer le quiz comme créé
+
+                            flash(f'Quiz "{titre}" créé avec succès !', 'success')
+                        except sqlite3.IntegrityError:
+                            flash(f'Un quiz avec le nom "{titre}" existe déjà.', 'danger')
 
     if form.validate_on_submit():
         question_data = {
@@ -274,6 +293,7 @@ def newPost():
             session.pop('cpt', None)
             session.pop('titre_quiz', None)
             session.pop('quiz_id', None)
+            session.pop('quiz_created', None)  # Réinitialiser l'indicateur
             return redirect(url_for('home'))
 
         session.modified = True  
