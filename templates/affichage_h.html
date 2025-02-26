@@ -1,0 +1,39 @@
+{% extends 'base_cnx.html' %} 
+{% block content %}
+
+<div id="quiz-container">
+    <h2>{{ question.quest }}</h2>
+
+    {% if question.type == "QCM" %}
+        <h2> {{ question.rep1 }}</h2>
+        <h2> {{ question.rep2 }}</h2>
+        <h2> {{ question.rep3 }}</h2>
+        <h2> {{ question.rep4 }}</h2>
+
+    {% elif question.type == "VraiFaux" %}
+        <h2> Vrai</h2>
+        <h2> Faux</h2>
+
+    {% elif question.type == "TexteLibre" %}
+        <input type="text" id="txt{{ question.id }}">
+    {% endif %}
+
+    <p>Temps restant : <span id="timer">{{ temps_restant }}</span> secondes</p>
+</div>
+
+<script>
+    // Timer en JavaScript
+    var tempsRestant = {{ temps_restant }};
+
+    var timer = setInterval(function() {
+        tempsRestant--;
+        document.getElementById("timer").innerHTML = tempsRestant;
+
+        if (tempsRestant <= 0) {
+            clearInterval(timer);
+            location.reload(); // Recharge la page pour passer à la question suivante
+        }
+    }, 1000); // Mise à jour toutes les secondes
+</script>
+
+{% endblock %}

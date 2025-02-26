@@ -1,0 +1,58 @@
+{% extends 'base_cnx.html' %} 
+{% block content %}
+<script>
+    var socket = io.connect(location.protocol + "//" + document.domain + ":" + location.port);
+
+    socket.on("connect", function() {
+        console.log("✅ Connecté au WebSocket");
+    });
+
+    socket.on("demarrer_quiz", function(data) {
+        console.log("🚀 Quiz démarré pour le quiz ID:", data.quiz_id);
+        window.location.href = "/affichage_j/" + data.quiz_id;
+    });
+</script>
+
+<div id="quiz-container">
+    {% for q in liste_qst %}
+        <h2>{{ q.quest }}</h2>
+
+        {% if q.type == "QCM" %}
+            <label><input type="radio" name="q{{ loop.index }}" value="{{ q.rep1 }}" onclick="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', '{{ q.rep1 }}')"> {{ q.rep1 }}</label><br>
+            <label><input type="radio" name="q{{ loop.index }}" value="{{ q.rep2 }}" onclick="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', '{{ q.rep2 }}')"> {{ q.rep2 }}</label><br>
+            <label><input type="radio" name="q{{ loop.index }}" value="{{ q.rep3 }}" onclick="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', '{{ q.rep3 }}')"> {{ q.rep3 }}</label><br>
+            <label><input type="radio" name="q{{ loop.index }}" value="{{ q.rep4 }}" onclick="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', '{{ q.rep4 }}')"> {{ q.rep4 }}</label><br>
+        
+        {% elif q.type == "VraiFaux" %}
+            <label><input type="radio" name="q{{ loop.index }}" value="Vrai" onclick="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', 'Vrai')"> Vrai</label><br>
+            <label><input type="radio" name="q{{ loop.index }}" value="Faux" onclick="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', 'Faux')"> Faux</label><br>
+
+        {% elif q.type == "TexteLibre" %}
+            <input type="text" id="txt{{ q.id }}" onblur="evaluerReponse('{{ q.bonne_rep }}', '{{ q.id }}', this.value)">
+        {% endif %}
+
+        <p id="feedback{{ q.id }}" style="display:none; font-weight: bold;"></p> <!-- Zone pour afficher la correction -->
+        <br>
+    {% endfor %}
+</div>
+
+<script>
+    function evaluerReponse(bonneReponse, questionId, reponseUtilisateur) {
+        let estCorrect = (bonneReponse === reponseUtilisateur); // Comparaison directe en JS
+
+        fetch("/traiter_resultat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ "question_id": questionId, "correct": estCorrect })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.redirect_url) {
+                window.location.href = data.redirect_url; // Redirection automatique
+            }
+        })
+        .catch(error => console.error("Erreur :", error));
+    }
+</script>
+
+{% endblock %}

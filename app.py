@@ -1,13 +1,22 @@
-from flask import Flask, render_template, url_for, flash, redirect,session,request
+from gevent import monkey
+monkey.patch_all()
+from gevent.pywsgi import WSGIServer
+from geventwebsocket.handler import WebSocketHandler
+
+
+
+from flask import Flask, render_template, url_for, flash, redirect,session,request,jsonify
 from forms import RegistrationForm, LoginForm,UpdateAccount, NewQuestionForm,EditPostForm,TitreQuiz,Pseudo_PinForm
 from flask_session import Session
 import sqlite3
 import os ,sys
 from werkzeug.utils import secure_filename
 from datetime import date
-from flask_socketio import join_room, leave_room, send, SocketIO ,emit
+from flask_socketio import join_room, leave_room, send, SocketIO,emit
 import random
 from string import ascii_uppercase
+import numpy as np
+import time
 
 
 
@@ -18,20 +27,16 @@ PERMANENT_SESSION_LIFETIME = 1800
 app.config.update(SECRET_KEY=os.urandom(24))
 app.config['UPLOAD_FOLDER'] = 'uploads'
 DEFAULT_PROFILE_IMAGE = 'smiley.jpg'
-
+TEMPS_QUESTION=30
+DEBUT=False
 Session(app)
 socketio = SocketIO(app, async_mode="gevent",cors_allowed_origins="*")
 
-rooms={}
-def generate_unique_code(length):
-    while True:
-        code = ""
-        for _ in range(length):
-            code += random.choice(ascii_uppercase)
-        
-        if code not in rooms:
-            break
-    
+
+
+def generate_unique_code(length=5):
+    characters = list(ascii_uppercase)
+    code = ''.join(np.random.choice(characters, length))
     return code
 
 @app.route("/")
@@ -39,6 +44,9 @@ def generate_unique_code(length):
 def base():
     
     return render_template('base.html')
+
+
+
 
 
 @app.route("/home")
@@ -305,11 +313,15 @@ def newPost():
 
 
 
+
+
+    
+
 @app.route("/logout")
 def logout():
     session.clear() 
     flash('You have been logged out!', 'success')
-    return redirect(url_for('base'))
+    return redirect(url_for('home'))
 
 @app.route("/about")
 def about():
@@ -343,6 +355,8 @@ def edit_post(quiz_id):
             flash('Le post a été modifié avec succès.', 'success')
             return redirect(url_for('home'))
 
+
+
     return render_template('edit_post.html', form=form, post=post)
 
 
@@ -374,136 +388,310 @@ def cnx_reussie(name):
     return render_template("cnx_reussie.html", name=name)
 
         
-      
+#pour permettre aux utilisateurs de rejoindre une room     
 @app.route("/join", methods=["POST", "GET"])
 def join():
     session.clear()
     if request.method == "POST":
         name = request.form.get("name")
         code = request.form.get("code")
-        join = request.form.get("join", False)
-        print("Salle demandée :", code) 
 
         if not name:
             return render_template("join.html", error="Please enter a name.", code=code, name=name)
 
-        if join and not code:
-            return render_template("join.html", error="Please enter a room code.", code=code, name=name)
+        if code:
+            with sqlite3.connect("kahoot_clone.db") as con:
+                cur = con.cursor()
+                # Vérifiez si la room existe
+                cur.execute('SELECT * FROM room WHERE id_room = ?', (code,))
+                room_exists = cur.fetchone()
 
-        room = code
+                if not room_exists:
+                    return render_template("join.html", error="Room does not exist.", code=code, name=name)
+                
+                # # Vérifiez si le pseudo est déjà pris
+                # cur.execute('''
+                #         SELECT 1 
+                #         FROM joueurs 
+                #         WHERE pseudo = ? 
+                #         AND id_room = ?
+                #         LIMIT 1
+                #     ''', (name, code))
+                # pseudo_exists = cur.fetchone()
 
-        if code not in rooms:
-            return render_template("join.html", error="Room does not exist.", code=code, name=name)
+                # if pseudo_exists:
+                #     return redirect(url_for('cnx_reussie', name=name))
+                
+               
+                cur.execute('INSERT INTO joueurs (id_room, pseudo) VALUES (?, ?)', (code, name))
+                con.commit()
 
-        session["name"] = name
-        session["room"] = code
-        print(f"Utilisateur {name} rejoint la salle {session['room']}")
-        if name in rooms[room]["users"]:
-            return redirect(url_for('cnx_reussie',name=name))
-        rooms[room]["users"].append(name)
-        if name in rooms[room]['users']:
-            print("le pseudo est : ",name)
-            return redirect(url_for('cnx_reussie',name=name))
+                session["name"] = name
+                session["room"] = code
+                return redirect(url_for('cnx_reussie', name=name))
 
     return render_template("join.html")
 
 
     
-@app.route("/room")
-def room():
+@app.route("/room/<int:quiz_id>",methods=["POST", "GET"])
+def room(quiz_id):
     room = session.get("room")
+    users = []
 
-    return render_template("room.html", code=room, users=rooms[room]["users"])
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute('SELECT pseudo FROM joueurs WHERE id_room = ?', (room,))
+        users = [row[0] for row in cur.fetchall()]
+    socketio.emit('demarrer_quiz', {'quiz_id': quiz_id})
+
+
+    return render_template("room.html", code=room, users=users, quiz_id=quiz_id)
+
+
+    
 
 
 
 
-@app.route("/create_room/<int:quiz_id>", methods=["GET","POST"])
+
+
+
+@app.route("/create_room/<int:quiz_id>", methods=["GET", "POST"])
 def create_room(quiz_id):
-
     room = generate_unique_code(5)
-    rooms[room] = {"members": 0, "messages": [], "users": []}  
+    date_creation = date.today().strftime("%Y-%m-%d")
 
-    # rooms[room] = {"members": 0, "messages": []}
-    print("Room créée :", room, rooms)
+    # Insérer la room dans la base de données
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute('INSERT INTO room (id_room, id_quiz, date_creation) VALUES (?, ?, ?)', 
+                    (room, quiz_id, date_creation))
+        con.commit()
+
     session["room"] = room
-    if room:
-        return redirect(url_for("room"))
-    return render_template("create_room.html",room=session['room'])
+    return redirect(url_for("room", quiz_id=quiz_id))
+
     
 
-@socketio.on("message")
-def message(data):
-    room = session.get("room")
-    if room not in rooms:
-        return 
+
+
+@app.route('/affichage_h/<int:quiz_id>', methods=["GET", "POST"])
+def affichage_h(quiz_id):
+    # Récupérer les questions depuis la base de données
+    liste_qst = []
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT rep1,rep2,rep3,rep4,type,bonne_rep,quest FROM qst WHERE id_quiz = ?", (quiz_id,))
+        questions = cur.fetchall()
+
+        for question in questions:
+            q = {
+                'rep1': question[0],
+                'rep2': question[1],
+                'rep3': question[2],
+                'rep4': question[3],
+                'type': question[4],
+                'bonne_rep': question[5],
+                'quest': question[6]
+            }
+            liste_qst.append(q)
+
+    # Initialisation du temps de début
+    if 'temps_debut' not in session:
+        session['temps_debut'] = time.time()
+
+    # Calcul du temps écoulé
+    temps_ecoule = time.time() - session['temps_debut']
+    question_index = int(temps_ecoule // TEMPS_QUESTION)  # Index de la question à afficher
+
+    # Vérifier si on a dépassé le nombre de questions
+    if question_index >= len(liste_qst):
+        session.pop('temps_debut', None)  # Réinitialiser pour un nouveau quiz
+        return redirect(url_for('fin_quiz'))  # Redirection vers une page de fin de quiz
+
+    # Temps restant pour la question en cours
+    temps_restant = TEMPS_QUESTION - (temps_ecoule % TEMPS_QUESTION)
+
+    # Rendre le template avec la question courante
+    return render_template('affichage_h.html', 
+                           question=liste_qst[question_index], 
+                           temps_restant=int(temps_restant))
+
+
+@app.route('/affichage_j/<int:quiz_id>', methods=["GET", "POST"])
+def affichage_j(quiz_id):
+    # Récupérer les questions depuis la base de données
+    liste_qst = []
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute("SELECT rep1,rep2,rep3,rep4,type,bonne_rep,quest FROM qst WHERE id_quiz = ?", (quiz_id,))
+        questions = cur.fetchall()
+
+        for question in questions:
+            q = {
+                'rep1': question[0],
+                'rep2': question[1],
+                'rep3': question[2],
+                'rep4': question[3],
+                'type': question[4],
+                'bonne_rep': question[5],
+                'quest': question[6]
+            }
+            liste_qst.append(q)
+
+    # Initialisation du temps de début
+    if 'temps_debut' not in session:
+        session['temps_debut'] = time.time()
+
+    # Calcul du temps écoulé
+    temps_ecoule = time.time() - session['temps_debut']
+    question_index = int(temps_ecoule // TEMPS_QUESTION)  # Index de la question à afficher
+
+    # Vérifier si on a dépassé le nombre de questions
+    if question_index >= len(liste_qst):
+        session.pop('temps_debut', None)  # Réinitialiser pour un nouveau quiz
+        return redirect(url_for('fin_quiz'))  # Redirection vers une page de fin de quiz
+
     
-    content = {
-        "name": session.get("name"),
-        "message": data["data"]
-    }
-    send(content, to=room)
-    rooms[room]["messages"].append(content)
-    print(f"{session.get('name')} said: {data['data']}")
+    temps_restant = TEMPS_QUESTION - (temps_ecoule % TEMPS_QUESTION)
+
+    # Rendre le template avec la question courante
+    return render_template('affichage_j.html', 
+                           question=liste_qst[question_index], 
+                           temps_restant=int(temps_restant))
+
+@app.route("/traiter_resultat", methods=["POST"])
+def traiter_resultat():
+    data = request.json
+    est_correct = data.get("correct", False)
+
+    if est_correct:
+        return jsonify({"redirect_url": url_for("bonne_reponse")})
+    else:
+        return jsonify({"redirect_url": url_for("mauvaise_reponse")})
+
+@app.route("/bonne_reponse")
+def bonne_reponse():
+    return render_template("bonne_reponse.html")  
+
+@app.route("/mauvaise_reponse")
+def mauvaise_reponse():
+    return render_template("mauvaise_reponse.html")  
+
+
+@app.route("/fin_quiz")
+def fin_quiz():
+    return render_template("fin_quiz.html") 
+
+
 
 @socketio.on("connect")
 def connect(auth):
     room = session.get("room")
     name = session.get("name")
     print(f"Tentative de connexion WebSocket: {name} dans {room}")
+
     if not room or not name:
         return
-    if room not in rooms:
-        leave_room(room)
-        return
-    
+
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        
+        # Vérifier si la room existe
+        cur.execute('SELECT * FROM room WHERE id_room = ?', (room,))
+        room_exists = cur.fetchone()
+
+        if not room_exists:
+            print(f"Room {room} n'existe pas.")
+            return
+        
+        # Vérifier si l'utilisateur est bien dans la base de données
+        cur.execute('SELECT * FROM joueurs WHERE id_room = ? AND pseudo = ?', (room, name))
+        user_exists = cur.fetchone()
+
+        if not user_exists:
+            print(f"Utilisateur {name} non trouvé dans la room {room}.")
+            return
+
+    # Si tout est OK, on joint la room WebSocket
     join_room(room)
-    send({"name": name, "message": "has entered the room"}, to=room)
+    send({"name": name, "message": "a rejoint la room"}, to=room)
 
-    rooms[room]["members"] += 1
-    if "users" not in rooms[room]:
-        rooms[room]["users"] = []
-    rooms[room]["users"].append(name) 
-
-    print(f"{name} joined room {room}")
-
-@socketio.on("join_room")
-def handle_join(data):
-    room = data["room"]
-    name = data["name"]
-    
-    print(f"🔥 WebSocket: {name} rejoint {room}")  # Debugging
-
-    if room not in rooms:
-        return
-    
-    join_room(room)
-    
-    rooms[room]["members"] += 1
-    rooms[room]["users"].append(name)
-
-    print(f"✅ {name} ajouté à {room}. Utilisateurs: {rooms[room]['users']}, Membres: {rooms[room]['members']}")
-
-    emit("update_users", {"users": rooms[room]["users"], "members": rooms[room]["members"]}, room=room)
-
+    # ➡️ Émettre un événement pour mettre à jour la liste des utilisateurs
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute('SELECT pseudo FROM joueurs WHERE id_room = ?', (room,))
+        users = [row[0] for row in cur.fetchall()]
+        
+    emit("update_users", {"users": users}, room=room)
+    print(f"{name} a rejoint la room {room}")
 
 @socketio.on("disconnect")
 def disconnect():
     room = session.get("room")
     name = session.get("name")
+    print(f"{name} tente de quitter la room {room}")
+
+    if not room or not name:
+        return
+
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+
+        # Supprimer l'utilisateur de la room
+        cur.execute('DELETE FROM joueurs WHERE id_room = ? AND pseudo = ?', (room, name))
+        con.commit()
+
+        # Vérifier s'il reste des utilisateurs dans la room
+        cur.execute('SELECT COUNT(*) FROM joueurs WHERE id_room = ?', (room,))
+        members_count = cur.fetchone()[0]
+
+        # Si plus personne dans la room, on peut la supprimer
+        if members_count == 0:
+            cur.execute('DELETE FROM room WHERE id_room = ?', (room,))
+            con.commit()
+            print(f"La room {room} a été supprimée car vide.")
+
     leave_room(room)
+    send({"name": name, "message": "a quitté la room"}, to=room)
 
-    if room in rooms:
-        rooms[room]["members"] -= 1
-        if name in rooms[room]["users"]:
-            rooms[room]["users"].remove(name)  # Retirer l'utilisateur de la liste
+    # Mise à jour des utilisateurs restants dans la room
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute('SELECT pseudo FROM joueurs WHERE id_room = ?', (room,))
+        users = [row[0] for row in cur.fetchall()]
+        
+    emit("update_users", {"users": users}, room=room)
+    print(f"{name} a quitté la room {room}")
 
-        if rooms[room]["members"] <= 0:
-            del rooms[room]
+@socketio.on("onContinuer")
+def on_continuer():
+    room = session.get("room")
+    print(f"📢 Le bouton 'Continuer' a été pressé dans la room {room}")
+
+    if not room:
+        print("❌ Pas de room associée à cette session")
+        return
     
-    send({"name": name, "message": "has left the room"}, to=room)
-    print(f"{name} has left the room {room}")
-    
+    # Récupère l'ID du quiz pour cette room
+    with sqlite3.connect("kahoot_clone.db") as con:
+        cur = con.cursor()
+        cur.execute('SELECT id_quiz FROM room WHERE id_room = ?', (room,))
+        quiz_id = cur.fetchone()
+        
+        if quiz_id:
+            quiz_id = quiz_id[0]
+            # 🔥 Diffuse l'événement start_questions à tous les utilisateurs de la room
+            socketio.emit("start_questions", {"quiz_id": quiz_id}, room=room)
+            print(f"🚀 Événement 'start_questions' émis pour le quiz {quiz_id} dans la room {room}")
+        else:
+            print("❌ Aucun quiz trouvé pour cette room")
+
+
+
+
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    http_server = WSGIServer(('0.0.0.0', 5000), app, handler_class=WebSocketHandler)
+    http_server.serve_forever()

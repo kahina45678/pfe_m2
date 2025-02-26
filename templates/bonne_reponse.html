@@ -1,0 +1,9 @@
+<!-- bonne_reponse.html -->
+{% extends 'base_cnx.html' %}
+{% block content %}
+<div style="text-align: center; margin-top: 50px;">
+    <h1 style="color: green; font-size: 3rem;">✅ Bonne réponse !</h1>
+    <p>Félicitations ! Vous avez trouvé la bonne réponse.</p>
+    <meta http-equiv="refresh" content="3;url={{ url_for('affichage_j', quiz_id=session.get('quiz_id', 1)) }}">
+</div>
+{% endblock %}
