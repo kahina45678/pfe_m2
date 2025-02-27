@@ -1,61 +1,61 @@
 {% extends 'base_cnx.html' %}
 {% block content %}
 
-<script>
-    var socket = io.connect(location.protocol + "//" + document.domain + ":" + location.port);
-
-    socket.on("connect", function() {
-        console.log("✅ Connecté au WebSocket");
-    });
-
-    socket.on("update_users", function(data) {
-        console.log("📝 Mise à jour des utilisateurs:", data);
-        document.getElementById("nb_users").innerText = data.members;
-    });
-</script>
-
 <div class="user-box">
     <h2>Room: {{ code }}</h2>
-    <h3>Utilisateurs connectés : {{ users | length }}</h3>
-    <ul>
+    <h3>Utilisateurs connectés : <span id="nb_users">{{ users | length }}</span></h3>
+    <ul id="user-list">
         {% for user in users %}
             <li>{{ user }}</li>
         {% endfor %}
     </ul>
 </div>
 
+<form id="continuer-form" action="{{ url_for('affichage_h', quiz_id=quiz_id) }}" method="get">
+    <button type="submit" id="btn-continuer">Continuer</button>
+</form>
 
-<!-- <form action="{{ url_for('affichage_h', quiz_id=quiz_id) }}" method="get">
-    <button type="submit">Continuer</button> -->
-    <form id="continuer-form" action="{{ url_for('affichage_h', quiz_id=quiz_id) }}" method="get">
-        <button type="submit" id="btn-continuer">Continuer</button>
-    </form>
-    
-    <script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
-    <script>
-        // Connexion à Socket.IO
-        const socket = io();
-    
-        // ✅ Vérifie la connexion WebSocket pour TOUS les utilisateurs
-        socket.once("connect", function() {
-            console.log("✅ Connecté à Socket.IO avec l'ID :", socket.id);
-        });
-    
-        // Lors du clic sur "Continuer", émettre un événement avant de soumettre le formulaire
-        document.getElementById("btn-continuer").addEventListener("click", function(event) {
-            event.preventDefault(); // Empêcher le comportement par défaut du bouton
-            console.log("🟡 Bouton 'Continuer' cliqué, émission de l'événement onContinuer...");
-            socket.emit("onContinuer"); // 🔥 Émet l'événement Socket.IO
-            document.getElementById("continuer-form").submit(); // Puis soumet le formulaire normalement
-        });
-    
-        // Réception de l'événement pour démarrer les questions
-        socket.on("start_questions", (data) => {
-            console.log("🚀 Redirection reçue pour affichage_j:", data.quiz_id);
-            // ✅ Force le rafraîchissement complet pour éviter le cache
-            window.location.replace(`/affichage_j/${data.quiz_id}`);
-        });
-    </script>
+<script>
+    // Connexion à Socket.IO
+    const socket = io();
 
+    // ✅ Vérifie la connexion WebSocket
+    socket.once("connect", function() {
+        console.log("✅ Connecté à Socket.IO avec l'ID :", socket.id);
+    });
+
+    // Écoute l'événement "update_users"
+    socket.on("update_users", function(data) {
+        console.log("📝 Mise à jour des utilisateurs:", data);
+
+        // Met à jour le nombre d'utilisateurs
+        document.getElementById("nb_users").innerText = data.users.length;
+
+        // Met à jour la liste des utilisateurs
+        const userList = document.getElementById("user-list");
+        userList.innerHTML = ""; // Vide la liste actuelle
+
+        data.users.forEach(user => {
+            const li = document.createElement("li");
+            li.textContent = user;
+            userList.appendChild(li);
+        });
+    });
+
+    // Lors du clic sur "Continuer", émettre un événement avant de soumettre le formulaire
+    document.getElementById("btn-continuer").addEventListener("click", function(event) {
+        event.preventDefault(); // Empêcher le comportement par défaut du bouton
+        console.log("🟡 Bouton 'Continuer' cliqué, émission de l'événement onContinuer...");
+        socket.emit("onContinuer"); // 🔥 Émet l'événement Socket.IO
+        document.getElementById("continuer-form").submit(); // Puis soumet le formulaire normalement
+    });
+
+    // Réception de l'événement pour démarrer les questions
+    socket.on("start_questions", (data) => {
+        console.log("🚀 Redirection reçue pour affichage_j:", data.quiz_id);
+        // ✅ Force le rafraîchissement complet pour éviter le cache
+        window.location.replace(`/affichage_j/${data.quiz_id}`);
+    });
+</script>
 
 {% endblock %}

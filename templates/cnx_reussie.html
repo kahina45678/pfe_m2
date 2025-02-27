@@ -8,6 +8,22 @@
    
     
   </div>
+  <script>
+    // Connexion à Socket.IO
+    const socket = io();
+
+    // ✅ Vérifie la connexion WebSocket pour TOUS les utilisateurs
+    socket.once("connect", function() {
+        console.log("✅ Connecté à Socket.IO avec l'ID :", socket.id);
+    });
+
+    // Réception de l'événement pour démarrer les questions
+    socket.on("start_questions", (data) => {
+        console.log("🚀 Redirection reçue pour affichage_j:", data.quiz_id);
+        // ✅ Force le rafraîchissement complet pour éviter le cache
+        window.location.replace(`/affichage_j/${data.quiz_id}`);
+    });
+</script>
   
 
 {% endblock %}

@@ -8,17 +8,100 @@
       placeholder="Saisir un pseudo !"
       name="name"
       value="{{name}}"
+      required
     />
   </div>
   <div class="join">
-    <input type="text" placeholder="Room Code" name="code" value="{{code}}" />
+    <input
+      type="text"
+      placeholder="Room Code"
+      name="code"
+      value="{{code}}"
+      required
+    />
     <button type="submit" name="join">Join a Room</button>
   </div>
-  
+
   {% if error %}
   <ul>
     <li>{{error}}</li>
   </ul>
   {% endif %}
 </form>
+
+<script src="https://cdn.socket.io/4.3.2/socket.io.min.js"></script>
+<script>
+  const socket = io();
+
+  document.querySelector("form").addEventListener("submit", function (event) {
+    event.preventDefault(); // Empêche la soumission par défaut
+
+    const name = document.querySelector("input[name='name']").value;
+    const code = document.querySelector("input[name='code']").value;
+
+    if (!name || !code) {
+      alert("Veuillez saisir un pseudo et un code de room !");
+      return;
+    }
+
+    // Émet un événement pour rejoindre la room
+    socket.emit("join_room", { name, code });
+
+    // Soumet le formulaire après avoir rejoint la room
+    this.submit();
+  });
+
+  // Écoute les événements du serveur
+  socket.on("room_joined", (data) => {
+    console.log("Room joined:", data);
+    window.location.href = `/room/${data.code}`; // Redirige vers la room
+  });
+
+  socket.on("join_error", (error) => {
+    alert(error); // Affiche une erreur si la room est pleine ou n'existe pas
+  });
+</script>
+
+<style>
+  .buttons {
+    max-width: 400px;
+    margin: 0 auto;
+    padding: 20px;
+    border: 1px solid #ccc;
+    border-radius: 10px;
+    background-color: #f9f9f9;
+  }
+  .buttons h3 {
+    text-align: center;
+  }
+  .buttons div {
+    margin-bottom: 15px;
+  }
+  .buttons label {
+    display: block;
+    margin-bottom: 5px;
+  }
+  .buttons input {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+  }
+  .buttons button {
+    width: 100%;
+    padding: 10px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .buttons button:hover {
+    background-color: #218838;
+  }
+  .buttons ul {
+    color: red;
+    list-style-type: none;
+    padding: 0;
+  }
+</style>
 {% endblock %}
