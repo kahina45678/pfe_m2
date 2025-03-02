@@ -11,9 +11,12 @@
     </ul>
 </div>
 
-<form id="continuer-form" action="{{ url_for('affichage_h', quiz_id=quiz_id) }}" method="get">
-    <button type="submit" id="btn-continuer">Continuer</button>
-</form>
+<!-- Ajoutez un conteneur pour le formulaire -->
+<div class="form-container">
+    <form id="continuer-form" action="{{ url_for('affichage_h', quiz_id=quiz_id) }}" method="get">
+        <button type="submit" class="btn-continuer">Continuer</button>
+    </form>
+</div>
 
 <script>
     // Connexion à Socket.IO
@@ -31,7 +34,7 @@
         // Met à jour le nombre d'utilisateurs
         document.getElementById("nb_users").innerText = data.users.length;
 
-        // Met à jour la liste des utilisateurs
+        // Met à jour la liste des utilisateurs 
         const userList = document.getElementById("user-list");
         userList.innerHTML = ""; // Vide la liste actuelle
 
@@ -43,7 +46,7 @@
     });
 
     // Lors du clic sur "Continuer", émettre un événement avant de soumettre le formulaire
-    document.getElementById("btn-continuer").addEventListener("click", function(event) {
+    document.querySelector(".btn-continuer").addEventListener("click", function(event) {
         event.preventDefault(); // Empêcher le comportement par défaut du bouton
         console.log("🟡 Bouton 'Continuer' cliqué, émission de l'événement onContinuer...");
         socket.emit("onContinuer"); // 🔥 Émet l'événement Socket.IO
@@ -57,5 +60,104 @@
         window.location.replace(`/affichage_j/${data.quiz_id}`);
     });
 </script>
+<style>
+    body {
+        background-color: #f3f4f6;
+        font-family: 'Arial', sans-serif;
+        color: #333;
+        margin: 0;
+        padding: 0;
+    }
+
+    .container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        flex-direction: column;
+    }
+
+    .user-box {
+        max-width: 600px;
+        margin: 40px auto;
+        padding: 20px;
+        background-color: #fff;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 10px;
+        text-align: center;
+        animation: fadeIn 0.8s;
+    }
+
+    h2 {
+        font-size: 2rem;
+        margin-bottom: 10px;
+        color: darkred;
+    }
+
+    h3 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+        color: #555;
+    }
+
+    ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    li {
+        font-size: 1.2rem;
+        padding: 8px 0;
+        border-bottom: 1px solid #ddd;
+        transition: background 0.3s;
+    }
+
+    li:last-child {
+        border-bottom: none;
+    }
+
+    li:hover {
+        background-color: #f0f0f0;
+    }
+
+    /* Conteneur pour centrer le formulaire */
+    .form-container {
+        display: flex;
+        justify-content: center; /* Centre horizontalement */
+        width: 100%; /* Prend toute la largeur disponible */
+    }
+
+    /* Style du bouton */
+    .btn-continuer {
+        display: inline-block;
+        padding: 12px 30px;
+        font-size: 1.2rem;
+        color: white;
+        background-color: #1e90ff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-top: 20px;
+    }
+
+    .btn-continuer:hover {
+        background-color: #1a7ccc;
+        transform: translateY(-3px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-continuer:active {
+        transform: translateY(0);
+        box-shadow: none;
+    }
+
+    /* Animation */
+    @keyframes fadeIn {
+        0% { opacity: 0; transform: translateY(-10px); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+</style>
 
 {% endblock %}

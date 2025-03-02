@@ -4,7 +4,6 @@ from gevent.pywsgi import WSGIServer
 from geventwebsocket.handler import WebSocketHandler
 
 
-
 from flask import Flask, render_template, url_for, flash, redirect,session,request,jsonify
 from forms import RegistrationForm, LoginForm,UpdateAccount, NewQuestionForm,EditPostForm,TitreQuiz,Pseudo_PinForm
 from flask_session import Session
@@ -17,7 +16,6 @@ import random
 from string import ascii_uppercase
 import numpy as np
 import time
-
 
 
 app = Flask(__name__)
@@ -44,9 +42,6 @@ def generate_unique_code(length=5):
 def base():
     
     return render_template('base.html')
-
-
-
 
 
 @app.route("/home")
@@ -97,8 +92,6 @@ def home():
             quizzes.append(quiz)
         
     return render_template('home.html', quizzes=quizzes, user_id=user_id)
-
-
 
 
 @app.route("/register", methods=['GET', 'POST'])
@@ -154,10 +147,6 @@ def login():
     return render_template('login.html', title='Login', form=form)
 
 
-
-
-
-
 @app.route("/account", methods=['GET', 'POST'])
 def account():
 
@@ -195,9 +184,6 @@ def account():
         return redirect(url_for('login'))
     
     return render_template('account.html', form=form, pdp=pdp)
-
-
-
 
 
 @app.route("/newPost", methods=['GET', 'POST'])
@@ -312,11 +298,6 @@ def newPost():
                            question_actuelle=question_actuelle, questions=session["questions"], cpt=session['cpt'])
 
 
-
-
-
-    
-
 @app.route("/logout")
 def logout():
     session.clear() 
@@ -355,10 +336,7 @@ def edit_post(quiz_id):
             flash('Le post a été modifié avec succès.', 'success')
             return redirect(url_for('home'))
 
-
-
     return render_template('edit_post.html', form=form, post=post)
-
 
 @app.route("/delete_post/<int:quiz_id>", methods=['GET', 'POST'])
 def delete_post(quiz_id):
@@ -409,20 +387,7 @@ def join():
                 if not room_exists:
                     return render_template("join.html", error="Room does not exist.", code=code, name=name)
                 
-                # # Vérifiez si le pseudo est déjà pris
-                # cur.execute('''
-                #         SELECT 1 
-                #         FROM joueurs 
-                #         WHERE pseudo = ? 
-                #         AND id_room = ?
-                #         LIMIT 1
-                #     ''', (name, code))
-                # pseudo_exists = cur.fetchone()
 
-                # if pseudo_exists:
-                #     return redirect(url_for('cnx_reussie', name=name))
-                
-               
                 cur.execute('INSERT INTO joueurs (id_room, pseudo) VALUES (?, ?)', (code, name))
                 con.commit()
 
@@ -433,7 +398,6 @@ def join():
     return render_template("join.html")
 
 
-    
 @app.route("/room/<int:quiz_id>",methods=["POST", "GET"])
 def room(quiz_id):
     room = session.get("room")
@@ -447,14 +411,6 @@ def room(quiz_id):
 
 
     return render_template("room.html", code=room, users=users, quiz_id=quiz_id)
-
-
-    
-
-
-
-
-
 
 
 @app.route("/create_room/<int:quiz_id>", methods=["GET", "POST"])
@@ -471,9 +427,6 @@ def create_room(quiz_id):
 
     session["room"] = room
     return redirect(url_for("room", quiz_id=quiz_id))
-
-    
-
 
 
 @app.route('/affichage_h/<int:quiz_id>', methods=["GET", "POST"])
@@ -515,8 +468,9 @@ def affichage_h(quiz_id):
 
     # Rendre le template avec la question courante
     return render_template('affichage_h.html', 
-                           question=liste_qst[question_index], 
-                           temps_restant=int(temps_restant))
+                          question=liste_qst[question_index], 
+                          question_index=question_index,
+                          temps_restant=int(temps_restant))
 
 
 @app.route('/affichage_j/<int:quiz_id>', methods=["GET", "POST"])
@@ -539,6 +493,8 @@ def affichage_j(quiz_id):
                 'quest': question[6]
             }
             liste_qst.append(q)
+
+    print("Questions récupérées :", liste_qst)
 
     # Initialisation du temps de début
     if 'temps_debut' not in session:
@@ -583,7 +539,6 @@ def mauvaise_reponse():
 @app.route("/fin_quiz")
 def fin_quiz():
     return render_template("fin_quiz.html") 
-
 
 
 @socketio.on("connect")
@@ -687,10 +642,6 @@ def on_continuer():
             print(f"🚀 Événement 'start_questions' émis pour le quiz {quiz_id} dans la room {room}")
         else:
             print("❌ Aucun quiz trouvé pour cette room")
-
-
-
-
 
 if __name__ == '__main__':
     http_server = WSGIServer(('0.0.0.0', 5000), app, handler_class=WebSocketHandler)
