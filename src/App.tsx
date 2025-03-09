@@ -47,12 +47,16 @@ function App() {
           {/* Liens de navigation */}
           <nav>
             <ul className="flex space-x-6">
-              <li>
-                <Link to="/login" className="hover:text-red-200 transition">Login</Link>
-              </li>
-              <li>
-                <Link to="/register" className="hover:text-red-200 transition">Register</Link>
-              </li>
+              {!user && (
+                <>
+                  <li>
+                    <Link to="/login" className="hover:text-red-200 transition">Login</Link>
+                  </li>
+                  <li>
+                    <Link to="/register" className="hover:text-red-200 transition">Register</Link>
+                  </li>
+                </>
+              )}
               {user && (
                 <>
                   <li>

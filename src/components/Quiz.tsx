@@ -24,7 +24,7 @@ const Quiz: React.FC = () => {
   const { roomCode } = useParams<{ roomCode: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  
+
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isHost, setIsHost] = useState(false);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'finished'>('waiting');
@@ -42,51 +42,51 @@ const Quiz: React.FC = () => {
   const [error, setError] = useState('');
   const [showQRCode, setShowQRCode] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
-  
+
   useEffect(() => {
     if (!user || !roomCode) return;
-    
+
     const newSocket = io('http://localhost:5000');
     setSocket(newSocket);
-    
+
     // Generate QR code data
     setQrCodeData(`http://localhost:5173/join/${roomCode}`);
-    
+
     newSocket.on('connect', () => {
       // Try to join the room
-      newSocket.emit('join_room', { 
+      newSocket.emit('join_room', {
         username: user.username,
         room_code: roomCode
       });
-      
+
       // Handle room joined
       newSocket.on('room_joined', (data) => {
         setIsHost(data.is_host);
         console.log('room_joined - isHost:', data.is_host);
       });
-      
+
       // Handle room created (if we're creating a room)
       newSocket.on('room_created', (data) => {
         setIsHost(data.is_host);
         console.log('room_created - isHost:', data.is_host);
       });
-      
+
       // Handle player joined
       newSocket.on('player_joined', (data) => {
         setPlayers(data.players);
       });
-      
+
       // Handle player left
       newSocket.on('player_left', (data) => {
         console.log('Player left:', data.user_id);
         setPlayers((prevPlayers) => prevPlayers.filter(player => player.id !== data.user_id));
       });
-      
+
       // Handle game started
       newSocket.on('game_started', () => {
         setGameState('playing');
       });
-      
+
       // Handle new question
       newSocket.on('new_question', (data) => {
         console.log("[DEBUG] New question received:", data);
@@ -96,34 +96,34 @@ const Quiz: React.FC = () => {
         setAnswerResult(null);
         setTimeLeft(data.time_limit || 15);
       });
-      
+
       // Handle answer result
       newSocket.on('answer_result', (data) => {
         setAnswerResult(data);
       });
-      
+
       // Handle update scores
       newSocket.on('update_scores', (data) => {
         setPlayers(data.players);
       });
-      
+
       // Handle game over
       newSocket.on('game_over', (data) => {
         setGameState('finished');
         setPlayers(data.players);
       });
-      
+
       // Handle errors
       newSocket.on('error', (data) => {
         setError(data.message);
       });
     });
-    
+
     return () => {
       newSocket.disconnect();
     };
   }, [roomCode, user]);
-  
+
   // Timer for questions
   useEffect(() => {
     if (!currentQuestion) return;
@@ -140,35 +140,35 @@ const Quiz: React.FC = () => {
 
     return () => clearInterval(timer);
   }, [currentQuestion]);
-  
-  
+
+
   const handleStartGame = () => {
     if (socket && isHost) {
       socket.emit('start_game', { room_code: roomCode });
     }
   };
-  
+
   const handleSubmitAnswer = (answerIndex: number) => {
     if (socket && !answerSubmitted) {
       setSelectedAnswer(answerIndex);
       setAnswerSubmitted(true);
-      socket.emit('submit_answer', { 
+      socket.emit('submit_answer', {
         answer: answerIndex
       });
     }
   };
-  
+
   const handleLeaveGame = () => {
     if (socket) {
       socket.disconnect();
     }
-    navigate('/');
+    navigate('/home');
   };
-  
+
   const toggleQRCode = () => {
     setShowQRCode(!showQRCode);
   };
-  
+
   // Render waiting room
   if (gameState === 'waiting') {
     return (
@@ -180,13 +180,13 @@ const Quiz: React.FC = () => {
             <span className="font-semibold">{players.length} Players</span>
           </div>
         </div>
-        
+
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
             <span className="block sm:inline">{error}</span>
           </div>
         )}
-        
+
         <div className="mb-6">
           <div className="bg-red-50 p-4 rounded-lg mb-4 flex justify-between items-center"> {/* Rouge clair */}
             <div>
@@ -196,27 +196,27 @@ const Quiz: React.FC = () => {
             <div className="flex space-x-2">
               <button
                 onClick={() => navigator.clipboard.writeText(roomCode || '')}
-                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded" 
+                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded"
               >
                 Copy
               </button>
               <button
                 onClick={toggleQRCode}
-                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded flex items-center" 
+                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded flex items-center"
               >
                 <QrCode size={16} className="mr-1" />
                 QR
               </button>
             </div>
           </div>
-          
+
           {showQRCode && qrCodeData && (
             <div className="bg-white p-4 rounded-lg border border-gray-200 mb-4 flex flex-col items-center">
               <p className="text-gray-700 mb-2">Scan to join:</p>
               <QRCodeSVG value={qrCodeData} size={200} />
             </div>
           )}
-          
+
           <h3 className="font-semibold text-lg mb-2">Players:</h3>
           <ul className="bg-gray-50 rounded-lg divide-y divide-gray-200">
             {players.map((player) => (
@@ -228,7 +228,7 @@ const Quiz: React.FC = () => {
             ))}
           </ul>
         </div>
-        
+
         <div className="flex space-x-4">
           {isHost && (
             <button
@@ -247,7 +247,7 @@ const Quiz: React.FC = () => {
       </div>
     );
   }
-  
+
   // Render game in progress
   if (gameState === 'playing') {
     return (
@@ -261,42 +261,38 @@ const Quiz: React.FC = () => {
             <span className="font-semibold">{timeLeft}s</span>
           </div>
         </div>
-        
+
         {currentQuestion && (
           <div className="mb-8">
             <div className="bg-red-50 p-6 rounded-lg mb-6"> {/* Rouge clair */}
               <h3 className="text-xl font-semibold text-gray-800 mb-2">{currentQuestion.question}</h3>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {currentQuestion.options.map((option, index) => (
                 <button
                   key={index}
                   onClick={() => handleSubmitAnswer(index)}
                   disabled={answerSubmitted}
-                  className={`p-4 rounded-lg text-left transition-all ${
-                    selectedAnswer === index 
-                      ? 'bg-red-800 text-white' 
+                  className={`p-4 rounded-lg text-left transition-all ${selectedAnswer === index
+                      ? 'bg-red-800 text-white'
                       : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-                  } ${
-                    answerSubmitted && answerResult && currentQuestion.options[index] === answerResult.correct_answer
+                    } ${answerSubmitted && answerResult && currentQuestion.options[index] === answerResult.correct_answer
                       ? 'bg-green-500 text-white'
                       : ''
-                  } ${
-                    answerSubmitted && selectedAnswer === index && answerResult && !answerResult.is_correct
+                    } ${answerSubmitted && selectedAnswer === index && answerResult && !answerResult.is_correct
                       ? 'bg-red-500 text-white'
                       : ''
-                  }`}
+                    }`}
                 >
                   <span className="font-semibold">{String.fromCharCode(65 + index)}.</span> {option}
                 </button>
               ))}
             </div>
-            
+
             {answerSubmitted && answerResult && (
-              <div className={`mt-6 p-4 rounded-lg ${
-                answerResult.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-              }`}>
+              <div className={`mt-6 p-4 rounded-lg ${answerResult.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
                 <div className="flex items-start">
                   {answerResult.is_correct ? (
                     <Award size={24} className="mr-2" />
@@ -308,8 +304,8 @@ const Quiz: React.FC = () => {
                       {answerResult.is_correct ? 'Correct!' : 'Incorrect!'}
                     </p>
                     <p>
-                      {answerResult.is_correct 
-                        ? `You earned ${answerResult.points} points!` 
+                      {answerResult.is_correct
+                        ? `You earned ${answerResult.points} points!`
                         : `The correct answer was: ${answerResult.correct_answer}`}
                     </p>
                   </div>
@@ -318,7 +314,7 @@ const Quiz: React.FC = () => {
             )}
           </div>
         )}
-        
+
         <div className="bg-gray-50 p-4 rounded-lg">
           <h3 className="font-semibold text-lg mb-2">Scores:</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
@@ -333,7 +329,7 @@ const Quiz: React.FC = () => {
       </div>
     );
   }
-  
+
   // Render game finished
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
@@ -341,29 +337,27 @@ const Quiz: React.FC = () => {
         <h2 className="text-3xl font-bold text-red-800 mb-2">Quiz Completed!</h2> {/* Rouge foncé */}
         <p className="text-gray-600">Here are the final results</p>
       </div>
-      
+
       <div className="mb-8">
         <h3 className="text-xl font-semibold text-red-700 mb-4 flex items-center justify-center"> {/* Rouge foncé */}
           <Award size={24} className="mr-2" />
           Final Standings
         </h3>
-        
+
         <div className="space-y-4">
           {players.sort((a, b) => b.score - a.score).map((player, index) => (
-            <div 
-              key={player.id} 
-              className={`p-4 rounded-lg flex items-center justify-between ${
-                index === 0 ? 'bg-yellow-100 border border-yellow-300' : 
-                index === 1 ? 'bg-gray-100 border border-gray-300' :
-                index === 2 ? 'bg-amber-100 border border-amber-300' : 'bg-white border border-gray-200'
-              }`}
+            <div
+              key={player.id}
+              className={`p-4 rounded-lg flex items-center justify-between ${index === 0 ? 'bg-yellow-100 border border-yellow-300' :
+                  index === 1 ? 'bg-gray-100 border border-gray-300' :
+                    index === 2 ? 'bg-amber-100 border border-amber-300' : 'bg-white border border-gray-200'
+                }`}
             >
               <div className="flex items-center">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                  index === 0 ? 'bg-yellow-500 text-white' : 
-                  index === 1 ? 'bg-gray-500 text-white' :
-                  index === 2 ? 'bg-amber-500 text-white' : 'bg-red-100 text-red-800' /* Rouge clair */
-                }`}>
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${index === 0 ? 'bg-yellow-500 text-white' :
+                    index === 1 ? 'bg-gray-500 text-white' :
+                      index === 2 ? 'bg-amber-500 text-white' : 'bg-red-100 text-red-800' /* Rouge clair */
+                  }`}>
                   {index + 1}
                 </div>
                 <span className="font-medium">{player.username}</span>
@@ -374,7 +368,7 @@ const Quiz: React.FC = () => {
           ))}
         </div>
       </div>
-      
+
       <div className="flex space-x-4">
         <button
           onClick={handleLeaveGame}
