@@ -218,14 +218,21 @@ def send_question(room_code):
 
     print(f"[DEBUG] Sending question {current_q + 1} to room {room_code}")
 
+    # Préparer les options en fonction du type de question
+    if question['type'] == 'true_false':
+        options = ['Vrai', 'Faux']
+    else:
+        options = [question['option_a'], question['option_b'], question['option_c'], question['option_d']]
+
     # Envoyer la question à l'hôte
     socketio.emit('new_question', {
         'question_number': current_q + 1,
         'total_questions': len(room['questions']),
         'question': question['question'],
-        'options': [question['option_a'], question['option_b'], question['option_c'], question['option_d']],
+        'options': options,
         'time_limit': question.get('time_limit', 15),
-        'start_time': datetime.now().timestamp()
+        'start_time': datetime.now().timestamp(),
+        'type': question['type']  # Ajouter le type de question
     }, to=room_code)
 
     # Démarrer un timer pour la question
@@ -450,8 +457,13 @@ def handle_submit_answer(data):
     # Enregistrer la réponse
     room['players'][user_id]['answers'][current_q] = answer
 
+    # Préparer les options en fonction du type de question
+    if question['type'] == 'true_false':
+        options = ['Vrai', 'Faux']
+    else:
+        options = [question['option_a'], question['option_b'], question['option_c'], question['option_d']]
+
     # Vérifier si la réponse est correcte
-    options = [question['option_a'], question['option_b'], question['option_c'], question['option_d']]
     is_correct = options[answer] == question['correct_answer']
     points = question.get('points', 10) if is_correct else 0
 
@@ -476,3 +488,4 @@ def handle_submit_answer(data):
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
+    

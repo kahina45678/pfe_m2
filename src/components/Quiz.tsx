@@ -18,33 +18,16 @@ interface Question {
   options: string[];
   time_limit: number;
   start_time: number;
+  type: 'qcm' | 'true_false'; // Ajouter le type de question
 }
 
-// Définir le type Color
 type Color = 'red' | 'blue' | 'green' | 'yellow';
 
-// Définir l'objet colorClasses
 const colorClasses: Record<Color, { bg: string; hover: string; selected: string }> = {
-  red: {
-    bg: 'bg-red-500',
-    hover: 'hover:bg-red-600',
-    selected: 'bg-red-800',
-  },
-  blue: {
-    bg: 'bg-blue-500',
-    hover: 'hover:bg-blue-600',
-    selected: 'bg-blue-800',
-  },
-  green: {
-    bg: 'bg-green-500',
-    hover: 'hover:bg-green-600',
-    selected: 'bg-green-800',
-  },
-  yellow: {
-    bg: 'bg-yellow-500',
-    hover: 'hover:bg-yellow-600',
-    selected: 'bg-yellow-800',
-  },
+  red: { bg: 'bg-red-500', hover: 'hover:bg-red-600', selected: 'bg-red-800' },
+  blue: { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', selected: 'bg-blue-800' },
+  green: { bg: 'bg-green-500', hover: 'hover:bg-green-600', selected: 'bg-green-800' },
+  yellow: { bg: 'bg-yellow-500', hover: 'hover:bg-yellow-600', selected: 'bg-yellow-800' },
 };
 
 const Quiz: React.FC = () => {
@@ -72,7 +55,6 @@ const Quiz: React.FC = () => {
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
 
   const username = location.state?.username || user?.username;
-  
 
   useEffect(() => {
     if (!username || !roomCode) return;
@@ -90,21 +72,17 @@ const Quiz: React.FC = () => {
 
       newSocket.on('room_joined', (data) => {
         setIsHost(user !== null);
-        console.log('room_joined - isHost:', user !== null);
       });
 
       newSocket.on('room_created', (data) => {
         setIsHost(user !== null);
-        console.log('room_created - isHost:', user !== null);
       });
 
       newSocket.on('player_joined', (data) => {
-        console.log('[DEBUG] Player joined:', data.players);
         setPlayers(data.players);
       });
 
       newSocket.on('player_left', (data) => {
-        console.log('Player left:', data.user_id);
         setPlayers((prevPlayers) => prevPlayers.filter((player) => player.id !== data.user_id));
       });
 
@@ -113,7 +91,6 @@ const Quiz: React.FC = () => {
       });
 
       newSocket.on('new_question', (data) => {
-        console.log('[DEBUG] New question received:', data);
         setCurrentQuestion(data);
         setSelectedAnswer(null);
         setAnswerSubmitted(false);
@@ -178,23 +155,15 @@ const Quiz: React.FC = () => {
 
   const handleLeaveGame = () => {
     if (socket) {
-      socket.disconnect(); // Déconnecter le socket
+      socket.disconnect();
     }
-  
-    // Vérifier si l'utilisateur est un hôte ou un joueur
-    if (isHost) {
-      navigate('/home'); // Rediriger l'hôte vers /home
-    } else {
-      navigate('/'); // Rediriger les joueurs vers /base
-    }
+    navigate(isHost ? '/home' : '/');
   };
 
   const toggleQRCode = () => {
     setShowQRCode(!showQRCode);
   };
 
-
-  
   if (gameState === 'waiting') {
     const filteredPlayers = players.filter((player) => player.id !== socket?.id || !isHost);
 
@@ -297,11 +266,14 @@ const Quiz: React.FC = () => {
               <h3 className="text-xl font-semibold text-gray-800 mb-2">{currentQuestion?.question}</h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {currentQuestion?.options.map((option, index) => (
-                <div key={index} className="p-4 rounded-lg bg-gray-100 text-gray-800">
-                  <span className="font-semibold">{String.fromCharCode(65 + index)}.</span> {option}
-                </div>
-              ))}
+              {currentQuestion?.options.map((option, index) => {
+                if (currentQuestion.type === 'true_false' && index >= 2) return null;
+                return (
+                  <div key={index} className="p-4 rounded-lg bg-gray-100 text-gray-800">
+                    <span className="font-semibold">{String.fromCharCode(65 + index)}.</span> {option}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : (
@@ -310,40 +282,99 @@ const Quiz: React.FC = () => {
               <h3 className="text-xl font-semibold text-gray-800 mb-2">Select your answer</h3>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              {['red', 'blue', 'green', 'yellow'].map((color, index) => {
-                const currentColor = color as Color;
-                const isCorrectAnswer = answerResult && currentQuestion?.options[index] === answerResult.correct_answer;
-                const isSelectedAnswer = selectedAnswer === index;
-
-                return (
+              {currentQuestion?.type === 'true_false' ? (
+                // Affichage pour les questions Vrai/Faux
+                <>
                   <button
-                    key={index}
-                    onClick={() => handleSubmitAnswer(index)}
+                    key={0}
+                    onClick={() => handleSubmitAnswer(0)}
                     disabled={answerSubmitted}
                     className={`p-4 rounded-lg text-white font-bold transition-all relative ${
-                      selectedAnswer === index
-                        ? colorClasses[currentColor].selected
-                        : `${colorClasses[currentColor].bg} ${colorClasses[currentColor].hover}`
+                      selectedAnswer === 0
+                        ? 'bg-blue-800' // Sélectionné
+                        : 'bg-blue-500 hover:bg-blue-600' // Non sélectionné
                     } ${
-                      answerSubmitted && isCorrectAnswer
+                      answerSubmitted && answerResult?.correct_answer === 'Vrai'
                         ? 'bg-green-500' // Bonne réponse
                         : ''
                     } ${
-                      answerSubmitted && isSelectedAnswer && !isCorrectAnswer
+                      answerSubmitted && selectedAnswer === 0 && answerResult?.correct_answer !== 'Vrai'
                         ? 'bg-red-500' // Mauvaise réponse
                         : ''
                     }`}
                   >
-                    {String.fromCharCode(65 + index)}
-                    {answerSubmitted && isSelectedAnswer && !isCorrectAnswer && (
+                    Vrai
+                    {answerSubmitted && selectedAnswer === 0 && answerResult?.correct_answer !== 'Vrai' && (
                       <span className="absolute top-1 right-1 text-white">✖️</span>
                     )}
-                    {answerSubmitted && isCorrectAnswer && (
+                    {answerSubmitted && answerResult?.correct_answer === 'Vrai' && (
                       <span className="absolute top-1 right-1 text-white">✔️</span>
                     )}
                   </button>
-                );
-              })}
+                  <button
+                    key={1}
+                    onClick={() => handleSubmitAnswer(1)}
+                    disabled={answerSubmitted}
+                    className={`p-4 rounded-lg text-white font-bold transition-all relative ${
+                      selectedAnswer === 1
+                        ? 'bg-red-800' // Sélectionné
+                        : 'bg-red-500 hover:bg-red-600' // Non sélectionné
+                    } ${
+                      answerSubmitted && answerResult?.correct_answer === 'Faux'
+                        ? 'bg-green-500' // Bonne réponse
+                        : ''
+                    } ${
+                      answerSubmitted && selectedAnswer === 1 && answerResult?.correct_answer !== 'Faux'
+                        ? 'bg-red-500' // Mauvaise réponse
+                        : ''
+                    }`}
+                  >
+                    Faux
+                    {answerSubmitted && selectedAnswer === 1 && answerResult?.correct_answer !== 'Faux' && (
+                      <span className="absolute top-1 right-1 text-white">✖️</span>
+                    )}
+                    {answerSubmitted && answerResult?.correct_answer === 'Faux' && (
+                      <span className="absolute top-1 right-1 text-white">✔️</span>
+                    )}
+                  </button>
+                </>
+              ) : (
+                // Affichage pour les questions QCM
+                currentQuestion?.options.map((option, index) => {
+                  const currentColor = ['red', 'blue', 'green', 'yellow'][index] as Color;
+                  const isCorrectAnswer = answerResult && option === answerResult.correct_answer;
+                  const isSelectedAnswer = selectedAnswer === index;
+
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleSubmitAnswer(index)}
+                      disabled={answerSubmitted}
+                      className={`p-4 rounded-lg text-white font-bold transition-all relative ${
+                        selectedAnswer === index
+                          ? colorClasses[currentColor].selected
+                          : `${colorClasses[currentColor].bg} ${colorClasses[currentColor].hover}`
+                      } ${
+                        answerSubmitted && isCorrectAnswer
+                          ? 'bg-green-500' // Bonne réponse
+                          : ''
+                      } ${
+                        answerSubmitted && isSelectedAnswer && !isCorrectAnswer
+                          ? 'bg-red-500' // Mauvaise réponse
+                          : ''
+                      }`}
+                    >
+                      {String.fromCharCode(65 + index)}
+                      {answerSubmitted && isSelectedAnswer && !isCorrectAnswer && (
+                        <span className="absolute top-1 right-1 text-white">✖️</span>
+                      )}
+                      {answerSubmitted && isCorrectAnswer && (
+                        <span className="absolute top-1 right-1 text-white">✔️</span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         )}
@@ -353,10 +384,21 @@ const Quiz: React.FC = () => {
           {isHost ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {players
-                .filter(player => player.id !== socket?.id) // Exclure l'hôte de la liste
+                .filter((player) => player.id !== socket?.id) // Exclure l'hôte
                 .sort((a, b) => b.score - a.score)
-                .map((player) => (
-                  <div key={player.id} className="bg-white p-3 rounded border border-gray-200">
+                .map((player, index) => (
+                  <div
+                    key={player.id}
+                    className={`p-3 rounded-lg ${
+                      index === 0
+                        ? 'bg-yellow-100 border border-yellow-300'
+                        : index === 1
+                        ? 'bg-gray-100 border border-gray-300'
+                        : index === 2
+                        ? 'bg-amber-100 border border-amber-300'
+                        : 'bg-white border border-gray-200'
+                    }`}
+                  >
                     <p className="font-medium">{player.username}</p>
                     <p className="text-red-800 font-bold">{player.score} pts</p>
                   </div>
@@ -386,46 +428,65 @@ const Quiz: React.FC = () => {
           Final Standings
         </h3>
 
-        <div className="space-y-4">
-          {players
-            .filter(player => player.id !== socket?.id) // Exclure l'hôte de la liste
-            .sort((a, b) => b.score - a.score)
-            .map((player, index) => (
-              <div
-                key={player.id}
-                className={`p-4 rounded-lg flex items-center justify-between ${
-                  index === 0
-                    ? 'bg-yellow-100 border border-yellow-300'
-                    : index === 1
-                    ? 'bg-gray-100 border border-gray-300'
-                    : index === 2
-                    ? 'bg-amber-100 border border-amber-300'
-                    : 'bg-white border border-gray-200'
-                }`}
-              >
-                <div className="flex items-center">
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
-                      index === 0
-                        ? 'bg-yellow-500 text-white'
-                        : index === 1
-                        ? 'bg-gray-500 text-white'
-                        : index === 2
-                        ? 'bg-amber-500 text-white'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {index + 1}
+        {isHost ? (
+          <div className="space-y-4">
+            {players
+              .filter((player) => player.id !== socket?.id) // Exclure l'hôte
+              .sort((a, b) => b.score - a.score)
+              .map((player, index) => (
+                <div
+                  key={player.id}
+                  className={`p-4 rounded-lg flex items-center justify-between ${
+                    index === 0
+                      ? 'bg-yellow-100 border border-yellow-300'
+                      : index === 1
+                      ? 'bg-gray-100 border border-gray-300'
+                      : index === 2
+                      ? 'bg-amber-100 border border-amber-300'
+                      : 'bg-white border border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div
+                      className={`w-8 h-8 rounded-full flex items-center justify-center mr-3 ${
+                        index === 0
+                          ? 'bg-yellow-500 text-white'
+                          : index === 1
+                          ? 'bg-gray-500 text-white'
+                          : index === 2
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {index + 1}
+                    </div>
+                    <span className="font-medium">{player.username}</span>
                   </div>
-                  <span className="font-medium">{player.username}</span>
-                  {player.id === socket?.id && (
-                    <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">You</span>
-                  )}
+                  <span className="font-bold text-lg">{player.score} pts</span>
                 </div>
-                <span className="font-bold text-lg">{player.score} pts</span>
-              </div>
-            ))}
-        </div>
+              ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {players
+              .filter((player) => player.id === socket?.id) // Afficher uniquement le joueur actuel
+              .map((player, index) => (
+                <div
+                  key={player.id}
+                  className="p-4 rounded-lg flex items-center justify-between bg-white border border-gray-200"
+                >
+                  <div className="flex items-center">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center mr-3 bg-red-100 text-red-800">
+                      {index + 1}
+                    </div>
+                    <span className="font-medium">{player.username}</span>
+                    <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">You</span>
+                  </div>
+                  <span className="font-bold text-lg">{player.score} pts</span>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
 
       <div className="flex space-x-4">

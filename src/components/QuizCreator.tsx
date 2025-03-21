@@ -13,6 +13,7 @@ interface QuestionForm {
   correct_answer: string;
   time_limit: number;
   points: number;
+  type: 'qcm' | 'true_false';  // Nouveau champ
 }
 
 const emptyQuestion: QuestionForm = {
@@ -23,7 +24,8 @@ const emptyQuestion: QuestionForm = {
   option_d: '',
   correct_answer: '',
   time_limit: 15,
-  points: 10
+  points: 10,
+  type: 'qcm'  // Valeur par défaut
 };
 
 const QuizCreator: React.FC = () => {
@@ -58,9 +60,29 @@ const QuizCreator: React.FC = () => {
   
   const updateQuestion = (field: keyof QuestionForm, value: string | number) => {
     const updatedQuestions = [...questions];
+    const currentQ = updatedQuestions[currentQuestion];
+  
+    if (field === 'type') {
+      if (value === 'true_false') {
+        // Définir automatiquement les options pour Vrai/Faux
+        currentQ.option_a = 'Vrai';
+        currentQ.option_b = 'Faux';
+        currentQ.option_c = '';
+        currentQ.option_d = '';
+        currentQ.correct_answer = ''; // Réinitialiser la bonne réponse
+      } else {
+        // Réinitialiser les options pour QCM
+        currentQ.option_a = '';
+        currentQ.option_b = '';
+        currentQ.option_c = '';
+        currentQ.option_d = '';
+        currentQ.correct_answer = '';
+      }
+    }
+  
     updatedQuestions[currentQuestion] = {
-      ...updatedQuestions[currentQuestion],
-      [field]: value
+      ...currentQ,
+      [field]: value,
     };
     setQuestions(updatedQuestions);
   };
@@ -68,33 +90,45 @@ const QuizCreator: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+  
     // Validation
     if (!title.trim()) {
       setError('Quiz title is required');
       return;
     }
-    
+  
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      if (!q.question.trim() || !q.option_a.trim() || !q.option_b.trim() || 
-          !q.option_c.trim() || !q.option_d.trim() || !q.correct_answer) {
+  
+      // Vérifier les champs obligatoires pour toutes les questions
+      if (!q.question.trim() || !q.option_a.trim() || !q.option_b.trim() || !q.correct_answer) {
+        setError(`Question ${i + 1} is incomplete`);
+        setCurrentQuestion(i);
+        return;
+      }
+  
+      // Pour les QCM uniquement, vérifier les options C et D
+      if (q.type === 'qcm' && (!q.option_c.trim() || !q.option_d.trim())) {
         setError(`Question ${i + 1} is incomplete`);
         setCurrentQuestion(i);
         return;
       }
     }
-    
+  
     setLoading(true);
-    
+  
     try {
       const response = await axios.post('http://localhost:5000/api/quizzes', {
         title,
         description,
         user_id: user?.id,
-        questions
+        questions: questions.map((q) => ({
+          ...q,
+          option_c: q.type === 'true_false' ? '' : q.option_c, // Option C vide pour Vrai/Faux
+          option_d: q.type === 'true_false' ? '' : q.option_d, // Option D vide pour Vrai/Faux
+        })),
       });
-      
+  
       navigate('/quizzes');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create quiz');
@@ -111,7 +145,7 @@ const QuizCreator: React.FC = () => {
         >
           <ArrowLeft size={24} />
         </button>
-        <h2 className="text-3xl font-bold text-red-800">Create New Quiz</h2> {/* Rouge foncé */}
+        <h2 className="text-3xl font-bold text-red-800">Create New Quiz</h2>
       </div>
       
       {error && (
@@ -195,6 +229,21 @@ const QuizCreator: React.FC = () => {
             
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
+                Question Type
+              </label>
+              <select
+                value={questions[currentQuestion].type}
+                onChange={(e) => updateQuestion('type', e.target.value as 'qcm' | 'true_false')}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                required
+              >
+                <option value="qcm">QCM</option>
+                <option value="true_false">Vrai/Faux</option>
+              </select>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
                 Question Text
               </label>
               <input
@@ -214,11 +263,12 @@ const QuizCreator: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={questions[currentQuestion].option_a}
+                  value={questions[currentQuestion].type === 'true_false' ? 'Vrai' : questions[currentQuestion].option_a}
                   onChange={(e) => updateQuestion('option_a', e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   placeholder="Option A"
                   required
+                  disabled={questions[currentQuestion].type === 'true_false'}
                 />
               </div>
               <div>
@@ -227,39 +277,44 @@ const QuizCreator: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={questions[currentQuestion].option_b}
+                  value={questions[currentQuestion].type === 'true_false' ? 'Faux' : questions[currentQuestion].option_b}
                   onChange={(e) => updateQuestion('option_b', e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   placeholder="Option B"
                   required
+                  disabled={questions[currentQuestion].type === 'true_false'}
                 />
               </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Option C
-                </label>
-                <input
-                  type="text"
-                  value={questions[currentQuestion].option_c}
-                  onChange={(e) => updateQuestion('option_c', e.target.value)}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  placeholder="Option C"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Option D
-                </label>
-                <input
-                  type="text"
-                  value={questions[currentQuestion].option_d}
-                  onChange={(e) => updateQuestion('option_d', e.target.value)}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  placeholder="Option D"
-                  required
-                />
-              </div>
+              {questions[currentQuestion].type === 'qcm' && (
+                <>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Option C
+                    </label>
+                    <input
+                      type="text"
+                      value={questions[currentQuestion].option_c}
+                      onChange={(e) => updateQuestion('option_c', e.target.value)}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      placeholder="Option C"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Option D
+                    </label>
+                    <input
+                      type="text"
+                      value={questions[currentQuestion].option_d}
+                      onChange={(e) => updateQuestion('option_d', e.target.value)}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      placeholder="Option D"
+                      required
+                    />
+                  </div>
+                </>
+              )}
             </div>
             
             <div className="mb-4">
@@ -273,10 +328,19 @@ const QuizCreator: React.FC = () => {
                 required
               >
                 <option value="">Select correct answer</option>
-                <option value={questions[currentQuestion].option_a}>Option A: {questions[currentQuestion].option_a}</option>
-                <option value={questions[currentQuestion].option_b}>Option B: {questions[currentQuestion].option_b}</option>
-                <option value={questions[currentQuestion].option_c}>Option C: {questions[currentQuestion].option_c}</option>
-                <option value={questions[currentQuestion].option_d}>Option D: {questions[currentQuestion].option_d}</option>
+                {questions[currentQuestion].type === 'true_false' ? (
+                  <>
+                    <option value="Vrai">Vrai</option>
+                    <option value="Faux">Faux</option>
+                  </>
+                ) : (
+                  <>
+                    <option value={questions[currentQuestion].option_a}>Option A: {questions[currentQuestion].option_a}</option>
+                    <option value={questions[currentQuestion].option_b}>Option B: {questions[currentQuestion].option_b}</option>
+                    <option value={questions[currentQuestion].option_c}>Option C: {questions[currentQuestion].option_c}</option>
+                    <option value={questions[currentQuestion].option_d}>Option D: {questions[currentQuestion].option_d}</option>
+                  </>
+                )}
               </select>
             </div>
             

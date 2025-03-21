@@ -14,6 +14,7 @@ interface QuestionForm {
   correct_answer: string;
   time_limit: number;
   points: number;
+  type: 'qcm' | 'true_false'; // Nouveau champ
 }
 
 interface Quiz {
@@ -32,14 +33,15 @@ const emptyQuestion: QuestionForm = {
   option_d: '',
   correct_answer: '',
   time_limit: 15,
-  points: 10
+  points: 10,
+  type: 'qcm', // Valeur par défaut
 };
 
 const QuizEditor: React.FC = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { quizId } = useParams<{ quizId: string }>();
-  
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [questions, setQuestions] = useState<QuestionForm[]>([{ ...emptyQuestion }]);
@@ -47,96 +49,155 @@ const QuizEditor: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  
+
   useEffect(() => {
     fetchQuiz();
   }, [quizId]);
-  
+
   const fetchQuiz = async () => {
     try {
       const response = await axios.get(`http://localhost:5000/api/quizzes/${quizId}`);
       const quiz: Quiz = response.data.quiz;
-      
-      // Check if user is the owner
+
+      // Vérifier si l'utilisateur est le propriétaire
       if (quiz.user_id !== user?.id) {
         setError('You do not have permission to edit this quiz');
         return;
       }
-      
+
       setTitle(quiz.title);
       setDescription(quiz.description || '');
-      setQuestions(quiz.questions.length > 0 ? quiz.questions : [{ ...emptyQuestion }]);
+      setQuestions(
+        quiz.questions.length > 0
+          ? quiz.questions.map((q) => ({
+              ...q,
+              type: q.type , // Assurer que le type est défini
+            }))
+          : [{ ...emptyQuestion }]
+      );
       setInitialLoading(false);
     } catch (err) {
       setError('Failed to load quiz');
       setInitialLoading(false);
     }
   };
-  
+
   const addQuestion = () => {
     setQuestions([...questions, { ...emptyQuestion }]);
     setCurrentQuestion(questions.length);
   };
-  
+
   const removeQuestion = (index: number) => {
     if (questions.length <= 1) {
       setError('Quiz must have at least one question');
       return;
     }
-    
+
     const newQuestions = questions.filter((_, i) => i !== index);
     setQuestions(newQuestions);
-    
+
     if (currentQuestion >= newQuestions.length) {
       setCurrentQuestion(newQuestions.length - 1);
     }
   };
-  
+
   const updateQuestion = (field: keyof QuestionForm, value: string | number) => {
     const updatedQuestions = [...questions];
+    const currentQ = updatedQuestions[currentQuestion];
+  
+    if (field === 'type') {
+      if (value === 'true_false') {
+        // Définir automatiquement les options pour Vrai/Faux
+        currentQ.option_a = 'Vrai';
+        currentQ.option_b = 'Faux';
+        currentQ.option_c = '';
+        currentQ.option_d = '';
+        currentQ.correct_answer = ''; // Réinitialiser la bonne réponse
+      } else {
+        // Réinitialiser les options pour QCM
+        currentQ.option_a = '';
+        currentQ.option_b = '';
+        currentQ.option_c = '';
+        currentQ.option_d = '';
+        currentQ.correct_answer = '';
+      }
+    }
+  
     updatedQuestions[currentQuestion] = {
-      ...updatedQuestions[currentQuestion],
-      [field]: value
+      ...currentQ,
+      [field]: value,
     };
+  
     setQuestions(updatedQuestions);
   };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
+  
     // Validation
-    if (!title.trim()) {
+    if (!title?.trim()) {
       setError('Quiz title is required');
       return;
     }
-    
+  
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-      if (!q.question.trim() || !q.option_a.trim() || !q.option_b.trim() || 
-          !q.option_c.trim() || !q.option_d.trim() || !q.correct_answer) {
-        setError(`Question ${i + 1} is incomplete`);
+  
+      if (!q.question?.trim()) {
+        setError(`Question ${i + 1} is incomplete (missing question text)`);
         setCurrentQuestion(i);
         return;
       }
+  
+      if (!q.correct_answer?.trim()) {
+        setError(`Question ${i + 1} is incomplete (missing correct answer)`);
+        setCurrentQuestion(i);
+        return;
+      }
+  
+      if (q.type === 'qcm') {
+        if (!q.option_a?.trim() || !q.option_b?.trim() || !q.option_c?.trim() || !q.option_d?.trim()) {
+          setError(`Question ${i + 1} is incomplete (all options must be filled for QCM)`);
+          setCurrentQuestion(i);
+          return;
+        }
+      } else if (q.type === 'true_false') {
+        // Pas besoin de vérifier option_a et option_b pour les questions Vrai/Faux
+        // La bonne réponse doit être soit "Vrai", soit "Faux"
+        if (q.correct_answer !== 'Vrai' && q.correct_answer !== 'Faux') {
+          setError(`Question ${i + 1} is invalid (correct answer must be 'Vrai' or 'Faux')`);
+          setCurrentQuestion(i);
+          return;
+        }
+      }
     }
-    
+  
     setLoading(true);
-    
+  
     try {
       await axios.put(`http://localhost:5000/api/quizzes/${quizId}`, {
         title,
         description,
-        questions
+        questions: questions.map(q => ({
+          ...q,
+          option_a: q.type === 'qcm' ? q.option_a : null,
+          option_b: q.type === 'qcm' ? q.option_b : null,
+          option_c: q.type === 'qcm' ? q.option_c : null,
+          option_d: q.type === 'qcm' ? q.option_d : null,
+          option_vrai: q.type === 'true_false' ? 'Vrai' : null,
+          option_faux: q.type === 'true_false' ? 'Faux' : null,
+        })),
       });
-      
+  
       navigate('/quizzes');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to update quiz');
       setLoading(false);
     }
   };
-  
+
+
   if (initialLoading) {
     return (
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8 text-center">
@@ -150,25 +211,25 @@ const QuizEditor: React.FC = () => {
       </div>
     );
   }
-  
+
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/quizzes')}
-          className="mr-4 text-red-800 hover:text-red-900" 
+          className="mr-4 text-red-800 hover:text-red-900"
         >
           <ArrowLeft size={24} />
         </button>
-        <h2 className="text-3xl font-bold text-red-800">Edit Quiz</h2> {/* Rouge foncé */}
+        <h2 className="text-3xl font-bold text-red-800">Edit Quiz</h2>
       </div>
-      
+
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
           <span className="block sm:inline">{error}</span>
         </div>
       )}
-      
+
       <form onSubmit={handleSubmit}>
         <div className="mb-6">
           <label htmlFor="title" className="block text-gray-700 text-sm font-bold mb-2">
@@ -184,7 +245,7 @@ const QuizEditor: React.FC = () => {
             required
           />
         </div>
-        
+
         <div className="mb-6">
           <label htmlFor="description" className="block text-gray-700 text-sm font-bold mb-2">
             Description
@@ -198,7 +259,7 @@ const QuizEditor: React.FC = () => {
             rows={3}
           />
         </div>
-        
+
         <div className="mb-6">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-xl font-semibold text-gray-800">Questions</h3>
@@ -211,7 +272,7 @@ const QuizEditor: React.FC = () => {
               Add Question
             </button>
           </div>
-          
+
           <div className="flex mb-4 overflow-x-auto pb-2">
             {questions.map((_, index) => (
               <button
@@ -219,8 +280,8 @@ const QuizEditor: React.FC = () => {
                 type="button"
                 onClick={() => setCurrentQuestion(index)}
                 className={`flex items-center justify-center min-w-[40px] h-10 mx-1 rounded-full ${
-                  currentQuestion === index 
-                    ? 'bg-red-800 text-white' 
+                  currentQuestion === index
+                    ? 'bg-red-800 text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
@@ -228,7 +289,7 @@ const QuizEditor: React.FC = () => {
               </button>
             ))}
           </div>
-          
+
           <div className="bg-gray-50 p-6 rounded-lg">
             <div className="flex justify-between items-center mb-4">
               <h4 className="font-semibold text-lg">Question {currentQuestion + 1}</h4>
@@ -241,7 +302,22 @@ const QuizEditor: React.FC = () => {
                 <Trash size={18} />
               </button>
             </div>
-            
+
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">
+                Question Type
+              </label>
+              <select
+                value={questions[currentQuestion].type}
+                onChange={(e) => updateQuestion('type', e.target.value as 'qcm' | 'true_false')}
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                required
+              >
+                <option value="qcm">QCM</option>
+                <option value="true_false">Vrai/Faux</option>
+              </select>
+            </div>
+
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Question Text
@@ -255,7 +331,7 @@ const QuizEditor: React.FC = () => {
                 required
               />
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-gray-700 text-sm font-bold mb-2">
@@ -263,11 +339,12 @@ const QuizEditor: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={questions[currentQuestion].option_a}
+                  value={questions[currentQuestion].type === 'true_false' ? 'Vrai' : questions[currentQuestion].option_a}
                   onChange={(e) => updateQuestion('option_a', e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   placeholder="Option A"
                   required
+                  disabled={questions[currentQuestion].type === 'true_false'}
                 />
               </div>
               <div>
@@ -276,41 +353,46 @@ const QuizEditor: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={questions[currentQuestion].option_b}
+                  value={questions[currentQuestion].type === 'true_false' ? 'Faux' : questions[currentQuestion].option_b}
                   onChange={(e) => updateQuestion('option_b', e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   placeholder="Option B"
                   required
+                  disabled={questions[currentQuestion].type === 'true_false'}
                 />
               </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Option C
-                </label>
-                <input
-                  type="text"
-                  value={questions[currentQuestion].option_c}
-                  onChange={(e) => updateQuestion('option_c', e.target.value)}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  placeholder="Option C"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-700 text-sm font-bold mb-2">
-                  Option D
-                </label>
-                <input
-                  type="text"
-                  value={questions[currentQuestion].option_d}
-                  onChange={(e) => updateQuestion('option_d', e.target.value)}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  placeholder="Option D"
-                  required
-                />
-              </div>
+              {questions[currentQuestion].type === 'qcm' && (
+                <>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Option C
+                    </label>
+                    <input
+                      type="text"
+                      value={questions[currentQuestion].option_c}
+                      onChange={(e) => updateQuestion('option_c', e.target.value)}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      placeholder="Option C"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Option D
+                    </label>
+                    <input
+                      type="text"
+                      value={questions[currentQuestion].option_d}
+                      onChange={(e) => updateQuestion('option_d', e.target.value)}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      placeholder="Option D"
+                      required
+                    />
+                  </div>
+                </>
+              )}
             </div>
-            
+
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Correct Answer
@@ -322,13 +404,23 @@ const QuizEditor: React.FC = () => {
                 required
               >
                 <option value="">Select correct answer</option>
-                <option value={questions[currentQuestion].option_a}>Option A: {questions[currentQuestion].option_a}</option>
-                <option value={questions[currentQuestion].option_b}>Option B: {questions[currentQuestion].option_b}</option>
-                <option value={questions[currentQuestion].option_c}>Option C: {questions[currentQuestion].option_c}</option>
-                <option value={questions[currentQuestion].option_d}>Option D: {questions[currentQuestion].option_d}</option>
+                {questions[currentQuestion].type === 'true_false' ? (
+                  <>
+                    <option value="Vrai">Option A: Vrai</option>
+                    <option value="Faux">Option B: Faux</option>
+                  </>
+                ) : (
+                  <>
+                    <option value={questions[currentQuestion].option_a}>Option A: {questions[currentQuestion].option_a}</option>
+                    <option value={questions[currentQuestion].option_b}>Option B: {questions[currentQuestion].option_b}</option>
+                    <option value={questions[currentQuestion].option_c}>Option C: {questions[currentQuestion].option_c}</option>
+                    <option value={questions[currentQuestion].option_d}>Option D: {questions[currentQuestion].option_d}</option>
+                  </>
+                )}
               </select>
             </div>
-            
+
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-gray-700 text-sm font-bold mb-2 flex items-center">
@@ -363,12 +455,12 @@ const QuizEditor: React.FC = () => {
             </div>
           </div>
         </div>
-        
+
         <div className="flex justify-end">
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+            className="flex items-center bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
           >
             <Save size={18} className="mr-2" />
             {loading ? 'Saving...' : 'Save Changes'}

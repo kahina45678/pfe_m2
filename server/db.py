@@ -1,3 +1,4 @@
+
 import sqlite3
 import os
 from datetime import datetime
@@ -42,13 +43,16 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         quiz_id INTEGER NOT NULL,
         question TEXT NOT NULL,
-        option_a TEXT NOT NULL,
-        option_b TEXT NOT NULL,
-        option_c TEXT NOT NULL,
-        option_d TEXT NOT NULL,
+        option_a TEXT,
+        option_b TEXT,
+        option_c TEXT,
+        option_d TEXT,
+        option_vrai TEXT,  -- Nouveau champ pour les questions vrai/faux
+        option_faux TEXT,  -- Nouveau champ pour les questions vrai/faux
         correct_answer TEXT NOT NULL,
         time_limit INTEGER DEFAULT 15,
         points INTEGER DEFAULT 10,
+        type TEXT NOT NULL,  
         FOREIGN KEY (quiz_id) REFERENCES quizzes (id) ON DELETE CASCADE
     )
     ''')
@@ -80,37 +84,6 @@ def init_db():
     )
     ''')
     
-    # Add some sample questions if none exist
-    cursor.execute("SELECT COUNT(*) FROM quizzes")
-    if cursor.fetchone()[0] == 0:
-        # Insert a sample quiz
-        cursor.execute('''
-        INSERT INTO quizzes (title, description, user_id) 
-        VALUES (?, ?, ?)
-        ''', ('General Knowledge', 'A quiz about various general knowledge topics', 1))
-        
-        quiz_id = cursor.lastrowid
-        
-        sample_questions = [
-            (quiz_id, "What is the capital of France?", "Berlin", "Madrid", "Paris", "Rome", "Paris", 15, 10),
-            (quiz_id, "Which planet is known as the Red Planet?", "Venus", "Mars", "Jupiter", "Saturn", "Mars", 15, 10),
-            (quiz_id, "What is the largest mammal?", "Elephant", "Blue Whale", "Giraffe", "Polar Bear", "Blue Whale", 15, 10),
-            (quiz_id, "Who wrote 'Romeo and Juliet'?", "Charles Dickens", "William Shakespeare", "Jane Austen", "Mark Twain", "William Shakespeare", 15, 10),
-            (quiz_id, "What is the chemical symbol for gold?", "Go", "Gd", "Au", "Ag", "Au", 15, 10),
-            (quiz_id, "Which country is home to the kangaroo?", "New Zealand", "South Africa", "Australia", "Brazil", "Australia", 15, 10),
-            (quiz_id, "What is the tallest mountain in the world?", "K2", "Mount Everest", "Kilimanjaro", "Denali", "Mount Everest", 15, 10),
-            (quiz_id, "Which element has the chemical symbol 'O'?", "Osmium", "Oxygen", "Oganesson", "Olivine", "Oxygen", 15, 10),
-            (quiz_id, "Who painted the Mona Lisa?", "Vincent van Gogh", "Pablo Picasso", "Leonardo da Vinci", "Michelangelo", "Leonardo da Vinci", 15, 10),
-            (quiz_id, "What is the largest ocean on Earth?", "Atlantic Ocean", "Indian Ocean", "Arctic Ocean", "Pacific Ocean", "Pacific Ocean", 15, 10)
-        ]
-        
-        cursor.executemany(
-            "INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, correct_answer, time_limit, points) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            sample_questions
-        )
-    
-    conn.commit()
-    conn.close()
 
 def get_quizzes_by_user(user_id):
     conn = get_db_connection()
@@ -134,7 +107,7 @@ def get_quiz_by_id(quiz_id):
     if quiz:
         quiz_dict = dict(quiz)
         questions = conn.execute('''
-        SELECT id, question, option_a, option_b, option_c, option_d, correct_answer, time_limit, points
+        SELECT id, question, option_a, option_b, option_c, option_d, correct_answer, time_limit, points, type
         FROM questions
         WHERE quiz_id = ?
         ''', (quiz_id,)).fetchall()
@@ -160,18 +133,21 @@ def create_quiz(title, description, user_id, questions):
     # Insert questions
     for q in questions:
         cursor.execute('''
-        INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, correct_answer, time_limit, points)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, option_vrai, option_faux, correct_answer, time_limit, points, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            quiz_id, 
-            q['question'], 
-            q['option_a'], 
-            q['option_b'], 
-            q['option_c'], 
-            q['option_d'], 
+            quiz_id,
+            q['question'],
+            q['option_a'] if q['type'] == 'qcm' else None,
+            q['option_b'] if q['type'] == 'qcm' else None,
+            q['option_c'] if q['type'] == 'qcm' else None,
+            q['option_d'] if q['type'] == 'qcm' else None,
+            'Vrai' if q['type'] == 'true_false' else None,
+            'Faux' if q['type'] == 'true_false' else None,
             q['correct_answer'],
             q.get('time_limit', 15),
-            q.get('points', 10)
+            q.get('points', 10),
+            q['type']
         ))
     
     conn.commit()
@@ -181,37 +157,41 @@ def create_quiz(title, description, user_id, questions):
 def update_quiz(quiz_id, title, description, questions):
     conn = get_db_connection()
     cursor = conn.cursor()
-    
-    # Update quiz
+
+    # Mettre à jour le quiz
     cursor.execute('''
     UPDATE quizzes
     SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
     ''', (title, description, quiz_id))
-    
-    # Delete existing questions
+
+    # Supprimer les anciennes questions
     cursor.execute('DELETE FROM questions WHERE quiz_id = ?', (quiz_id,))
-    
-    # Insert new questions
+
+    # Réinsérer les nouvelles questions
     for q in questions:
         cursor.execute('''
-        INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, correct_answer, time_limit, points)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, option_vrai, option_faux, correct_answer, time_limit, points, type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            quiz_id, 
-            q['question'], 
-            q['option_a'], 
-            q['option_b'], 
-            q['option_c'], 
-            q['option_d'], 
+            quiz_id,
+            q['question'],
+            q['option_a'] if q['type'] == 'qcm' else None,
+            q['option_b'] if q['type'] == 'qcm' else None,
+            q['option_c'] if q['type'] == 'qcm' else None,
+            q['option_d'] if q['type'] == 'qcm' else None,
+            'Vrai' if q['type'] == 'true_false' else None,
+            'Faux' if q['type'] == 'true_false' else None,
             q['correct_answer'],
             q.get('time_limit', 15),
-            q.get('points', 10)
+            q.get('points', 10),
+            q['type']
         ))
-    
+
     conn.commit()
     conn.close()
     return True
+
 
 def delete_quiz(quiz_id):
     conn = get_db_connection()
