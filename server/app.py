@@ -224,7 +224,7 @@ def send_question(room_code):
     else:
         options = [question['option_a'], question['option_b'], question['option_c'], question['option_d']]
 
-    # Envoyer la question à l'hôte
+    # Envoyer la question à tous les joueurs
     socketio.emit('new_question', {
         'question_number': current_q + 1,
         'total_questions': len(room['questions']),
@@ -232,73 +232,24 @@ def send_question(room_code):
         'options': options,
         'time_limit': question.get('time_limit', 15),
         'start_time': datetime.now().timestamp(),
-        'type': question['type']  # Ajouter le type de question
+        'type': question['type']
     }, to=room_code)
 
-    # Démarrer un timer pour la question
+    # Démarrer un timer pour la question (mais ne pas passer automatiquement à la suivante)
     def start_timer(room_code, time_limit):
         print(f"[DEBUG] Starting timer for question {current_q + 1} in room {room_code}")
         socketio.sleep(time_limit)
         print(f"[DEBUG] Timer expired for question {current_q + 1} in room {room_code}")
-        handle_timeout(room_code)
+        socketio.emit('time_up', to=room_code)  # Juste notifier que le temps est écoulé
 
+    if room_code in timers:
+        timers[room_code].join()  # Arrêter le timer précédent s'il existe
+        
     timers[room_code] = socketio.start_background_task(
         start_timer, room_code, question.get('time_limit', 15))
 
 
-def handle_timeout(room_code):
-    try:
-        room = active_rooms[room_code]
-        current_q = room['current_question']
-
-        print(f"[DEBUG] Timeout for question {current_q + 1} in room {room_code}")
-
-        # Submit automatic answers for players who didn't answer
-        for player_id, player in room['players'].items():
-            if current_q not in player['answers']:
-                player['answers'][current_q] = -1  # Indicate no answer
-
-        # Move to next question or end game
-        room['current_question'] += 1
-
-        if room['current_question'] < len(room['questions']):
-            print(
-                f"[DEBUG] Sending next question ({room['current_question'] + 1}) to room {room_code}")
-            send_question(room_code)
-        else:
-            print(f"[DEBUG] Ending game in room {room_code}")
-            # End game
-            room['state'] = 'finished'
-
-            # Save scores to database
-            for pid, player in room['players'].items():
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id FROM users WHERE username = ?", (player['username'],))
-                user_result = cursor.fetchone()
-                if user_result:
-                    db_user_id = user_result['id']
-                    save_score(db_user_id, room['quiz_id'], player['score'])
-                conn.close()
-
-            # Send final results
-            players_list = [
-                {'id': pid, 'username': player['username'],
-                    'score': player['score']}
-                for pid, player in room['players'].items()
-            ]
-            socketio.emit('game_over', {
-                          'players': players_list, 'quiz_id': room['quiz_id']}, to=room_code)
-
-            # Clean up
-            if room_code in timers:
-                del timers[room_code]
-    except Exception as e:
-        print(f"[ERROR] Error in handle_timeout for room {room_code}: {e}")
 # Socket events
-
-
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
@@ -428,6 +379,7 @@ def handle_start_game(data):
 
     active_rooms[room_code]['state'] = 'playing'
     active_rooms[room_code]['start_time'] = datetime.now().timestamp()
+    active_rooms[room_code]['current_question'] = 0  # Commencer à la première question
 
     # Émettez l'événement game_started
     emit('game_started', to=room_code)
@@ -449,6 +401,10 @@ def handle_submit_answer(data):
     room = active_rooms[room_code]
     if room['state'] != 'playing':
         emit('error', {'message': 'Game not in progress'})
+        return
+    
+    if hasattr(room, 'time_elapsed') and room.time_elapsed:
+        emit('error', {'message': 'Time has elapsed, cannot submit answer'})
         return
 
     current_q = room['current_question']
@@ -484,6 +440,104 @@ def handle_submit_answer(data):
         for pid, player in room['players'].items()
     ]
     emit('update_scores', {'players': players_list}, to=room_code)
+
+@socketio.on('next_question')
+def handle_next_question(data):
+    user_id = request.sid
+    room_code = user_rooms.get(user_id)
+
+    if not room_code or room_code not in active_rooms:
+        emit('error', {'message': 'Room not found'})
+        return
+
+    username = user_sessions.get(user_id)
+    if not username:
+        emit('error', {'message': 'User not found in session'})
+        return
+
+    if active_rooms[room_code]['host'] != username:
+        emit('error', {'message': 'Only the host can advance questions'})
+        return
+
+    room = active_rooms[room_code]
+    current_q = room['current_question']
+
+    # Submit automatic answers for players who didn't answer
+    for player_id, player in room['players'].items():
+        if current_q not in player['answers']:
+            player['answers'][current_q] = -1  # Indicate no answer
+
+    # Move to next question or end game
+    room['current_question'] += 1
+
+    if room['current_question'] < len(room['questions']):
+        print(f"[DEBUG] Sending next question ({room['current_question'] + 1}) to room {room_code}")
+        send_question(room_code)
+    else:
+        print(f"[DEBUG] Ending game in room {room_code}")
+        # End game
+        room['state'] = 'finished'
+
+        # Save scores to database
+        for pid, player in room['players'].items():
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT id FROM users WHERE username = ?", (player['username'],))
+            user_result = cursor.fetchone()
+            if user_result:
+                db_user_id = user_result['id']
+                save_score(db_user_id, room['quiz_id'], player['score'])
+            conn.close()
+
+        # Send final results
+        players_list = [
+            {'id': pid, 'username': player['username'],
+                'score': player['score']}
+            for pid, player in room['players'].items()
+        ]
+        socketio.emit('game_over', {
+                      'players': players_list, 'quiz_id': room['quiz_id']}, to=room_code)
+
+        # Clean up
+        if room_code in timers:
+            del timers[room_code]
+
+@socketio.on('submit_open_answer')
+def handle_submit_open_answer(data):
+    user_id = request.sid
+    room_code = user_rooms.get(user_id)
+    answer_text = data.get('answer_text')
+    question_index = data.get('question_index')
+
+    if not room_code or room_code not in active_rooms:
+        emit('error', {'message': 'Room not found'})
+        return
+
+    room = active_rooms[room_code]
+    if room['state'] != 'playing':
+        emit('error', {'message': 'Game not in progress'})
+        return
+
+    # Stocker la réponse ouverte
+    if 'open_answers' not in room:
+        room['open_answers'] = {}
+    
+    if question_index not in room['open_answers']:
+        room['open_answers'][question_index] = []
+    
+    username = user_sessions.get(user_id, 'Anonymous')
+    room['open_answers'][question_index].append({
+        'username': username,
+        'answer': answer_text
+    })
+
+    # Envoyer la réponse seulement à l'hôte
+    emit('new_open_answer', {
+        'question_index': question_index,
+        'username': username,
+        'answer': answer_text
+    }, to=room_code)
 
 
 if __name__ == '__main__':

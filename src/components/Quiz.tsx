@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { io, Socket } from 'socket.io-client';
-import { Clock, Users, Award, AlertCircle, QrCode } from 'lucide-react';
+import { Clock, Users, Award, AlertCircle, QrCode, ArrowRight  } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface Player {
@@ -53,6 +53,13 @@ const Quiz: React.FC = () => {
   const [error, setError] = useState('');
   const [showQRCode, setShowQRCode] = useState(false);
   const [qrCodeData, setQrCodeData] = useState<string | null>(null);
+  const [canAnswer, setCanAnswer] = useState(true);
+  const [showNextButton, setShowNextButton] = useState(false);
+  const [openAnswer, setOpenAnswer] = useState('');
+  const [openAnswersList, setOpenAnswersList] = useState<Array<{
+    username: string;
+    answer: string;
+  }>>([]);
 
   const username = location.state?.username || user?.username;
 
@@ -96,6 +103,24 @@ const Quiz: React.FC = () => {
         setAnswerSubmitted(false);
         setAnswerResult(null);
         setTimeLeft(data.time_limit || 15);
+        setCanAnswer(true); 
+        setShowNextButton(false);
+      });
+
+      newSocket.on('time_up', () => {
+        setCanAnswer(false); // Désactiver les réponses quand le temps est écoulé
+        if (isHost) {
+          setShowNextButton(true); // Afficher le bouton suivant seulement pour l'hôte
+        }
+      });
+
+      newSocket.on('new_open_answer', (data) => {
+        if (isHost) {
+          setOpenAnswersList(prev => [...prev, {
+            username: data.username,
+            answer: data.answer
+          }]);
+        }
       });
 
       newSocket.on('answer_result', (data) => {
@@ -135,7 +160,7 @@ const Quiz: React.FC = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [currentQuestion]);
+  }, [currentQuestion, canAnswer]);
 
   const handleStartGame = () => {
     if (socket && isHost) {
@@ -153,6 +178,23 @@ const Quiz: React.FC = () => {
     }
   };
 
+  const handleSubmitOpenAnswer = () => {
+    if (socket && currentQuestion && openAnswer.trim()) {
+      socket.emit('submit_open_answer', {
+        answer_text: openAnswer,
+        question_index: currentQuestion.question_number - 1
+      });
+      setAnswerSubmitted(true);
+      setOpenAnswer(''); // Vider le champ après envoi
+    }
+  };
+
+  const handleNextQuestion = () => {
+    if (socket && isHost) {
+      socket.emit('next_question', { room_code: roomCode });
+    }
+  };
+
   const handleLeaveGame = () => {
     if (socket) {
       socket.disconnect();
@@ -164,6 +206,8 @@ const Quiz: React.FC = () => {
     setShowQRCode(!showQRCode);
   };
 
+
+  //waiting
   if (gameState === 'waiting') {
     const filteredPlayers = players.filter((player) => player.id !== socket?.id || !isHost);
 
@@ -247,6 +291,8 @@ const Quiz: React.FC = () => {
     );
   }
 
+
+  //playing
   if (gameState === 'playing') {
     return (
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
@@ -260,6 +306,13 @@ const Quiz: React.FC = () => {
           </div>
         </div>
 
+        {!isHost && !canAnswer && !answerSubmitted && (
+          <div className="mb-4 p-3 bg-yellow-100 text-yellow-800 rounded-lg flex items-center">
+            <AlertCircle className="mr-2" />
+            Le temps est écoulé ! Vous ne pouvez plus répondre à cette question.
+          </div>
+        )}
+        
         {isHost ? (
           <div className="mb-8">
             <div className="bg-red-50 p-6 rounded-lg mb-6">
@@ -283,25 +336,24 @@ const Quiz: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-4">
               {currentQuestion?.type === 'true_false' ? (
-                // Affichage pour les questions Vrai/Faux
                 <>
                   <button
                     key={0}
                     onClick={() => handleSubmitAnswer(0)}
-                    disabled={answerSubmitted}
+                    disabled={answerSubmitted || !canAnswer}
                     className={`p-4 rounded-lg text-white font-bold transition-all relative ${
                       selectedAnswer === 0
-                        ? 'bg-blue-800' // Sélectionné
-                        : 'bg-blue-500 hover:bg-blue-600' // Non sélectionné
+                        ? 'bg-blue-800'
+                        : 'bg-blue-500 hover:bg-blue-600'
                     } ${
                       answerSubmitted && answerResult?.correct_answer === 'Vrai'
-                        ? 'bg-green-500' // Bonne réponse
+                        ? 'bg-green-500'
                         : ''
                     } ${
                       answerSubmitted && selectedAnswer === 0 && answerResult?.correct_answer !== 'Vrai'
-                        ? 'bg-red-500' // Mauvaise réponse
+                        ? 'bg-red-500'
                         : ''
-                    }`}
+                    } ${!canAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Vrai
                     {answerSubmitted && selectedAnswer === 0 && answerResult?.correct_answer !== 'Vrai' && (
@@ -314,20 +366,20 @@ const Quiz: React.FC = () => {
                   <button
                     key={1}
                     onClick={() => handleSubmitAnswer(1)}
-                    disabled={answerSubmitted}
+                    disabled={answerSubmitted || !canAnswer}
                     className={`p-4 rounded-lg text-white font-bold transition-all relative ${
                       selectedAnswer === 1
-                        ? 'bg-red-800' // Sélectionné
-                        : 'bg-red-500 hover:bg-red-600' // Non sélectionné
+                        ? 'bg-red-800'
+                        : 'bg-red-500 hover:bg-red-600'
                     } ${
                       answerSubmitted && answerResult?.correct_answer === 'Faux'
-                        ? 'bg-green-500' // Bonne réponse
+                        ? 'bg-green-500'
                         : ''
                     } ${
                       answerSubmitted && selectedAnswer === 1 && answerResult?.correct_answer !== 'Faux'
-                        ? 'bg-red-500' // Mauvaise réponse
+                        ? 'bg-red-500'
                         : ''
-                    }`}
+                    } ${!canAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     Faux
                     {answerSubmitted && selectedAnswer === 1 && answerResult?.correct_answer !== 'Faux' && (
@@ -339,7 +391,6 @@ const Quiz: React.FC = () => {
                   </button>
                 </>
               ) : (
-                // Affichage pour les questions QCM
                 currentQuestion?.options.map((option, index) => {
                   const currentColor = ['red', 'blue', 'green', 'yellow'][index] as Color;
                   const isCorrectAnswer = answerResult && option === answerResult.correct_answer;
@@ -349,20 +400,20 @@ const Quiz: React.FC = () => {
                     <button
                       key={index}
                       onClick={() => handleSubmitAnswer(index)}
-                      disabled={answerSubmitted}
+                      disabled={answerSubmitted || !canAnswer}
                       className={`p-4 rounded-lg text-white font-bold transition-all relative ${
                         selectedAnswer === index
                           ? colorClasses[currentColor].selected
                           : `${colorClasses[currentColor].bg} ${colorClasses[currentColor].hover}`
                       } ${
                         answerSubmitted && isCorrectAnswer
-                          ? 'bg-green-500' // Bonne réponse
+                          ? 'bg-green-500'
                           : ''
                       } ${
                         answerSubmitted && isSelectedAnswer && !isCorrectAnswer
-                          ? 'bg-red-500' // Mauvaise réponse
+                          ? 'bg-red-500'
                           : ''
-                      }`}
+                      } ${!canAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       {String.fromCharCode(65 + index)}
                       {answerSubmitted && isSelectedAnswer && !isCorrectAnswer && (
@@ -379,12 +430,12 @@ const Quiz: React.FC = () => {
           </div>
         )}
 
-        <div className="bg-gray-50 p-4 rounded-lg">
+        <div className="bg-gray-50 p-4 rounded-lg mb-6">
           <h3 className="font-semibold text-lg mb-2">Scores:</h3>
           {isHost ? (
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {players
-                .filter((player) => player.id !== socket?.id) // Exclure l'hôte
+                .filter((player) => player.id !== socket?.id)
                 .sort((a, b) => b.score - a.score)
                 .map((player, index) => (
                   <div
@@ -411,6 +462,20 @@ const Quiz: React.FC = () => {
             </div>
           )}
         </div>
+
+        {isHost && showNextButton && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <button
+              onClick={handleNextQuestion}
+              className="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center transition-all transform hover:scale-105"
+            >
+              {currentQuestion?.question_number === currentQuestion?.total_questions
+                ? 'Voir les résultats finaux'
+                : 'Passer à la question suivante'}
+              <ArrowRight size={20} className="ml-2" />
+            </button>
+          </div>
+        )}
       </div>
     );
   }
