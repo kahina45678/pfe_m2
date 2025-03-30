@@ -218,12 +218,22 @@ def send_question(room_code):
 
     print(f"[DEBUG] Sending question {current_q + 1} to room {room_code}")
 
+    # Réinitialiser les réponses ouvertes pour cette question
+    if 'open_answers' in room:
+        room['open_answers'][current_q] = []  # Utiliser current_q comme clé
+
     # Préparer les options en fonction du type de question
+    options = None
     if question['type'] == 'true_false':
         options = ['Vrai', 'Faux']
-    else:
-        options = [question['option_a'], question['option_b'], question['option_c'], question['option_d']]
-
+    elif question['type'] == 'qcm':
+        options = [
+            question.get('option_a'),
+            question.get('option_b'),
+            question.get('option_c'),
+            question.get('option_d')
+        ]
+            
     # Envoyer la question à tous les joueurs
     socketio.emit('new_question', {
         'question_number': current_q + 1,
@@ -233,7 +243,7 @@ def send_question(room_code):
         'time_limit': question.get('time_limit', 15),
         'start_time': datetime.now().timestamp(),
         'type': question['type']
-    }, to=room_code)
+    }, room=room_code)
 
     # Démarrer un timer pour la question (mais ne pas passer automatiquement à la suivante)
     def start_timer(room_code, time_limit):
@@ -306,6 +316,7 @@ def handle_create_room(data):
     # Créer la salle sans ajouter l'hôte à la liste des joueurs
     active_rooms[room_code] = {
         'host': username,  # Stocker l'hôte séparément
+        'host_id': user_id,
         'quiz_id': quiz_id,
         'players': {},  # Liste des joueurs (sans l'hôte)
         'questions': quiz['questions'],
@@ -507,38 +518,36 @@ def handle_next_question(data):
 def handle_submit_open_answer(data):
     user_id = request.sid
     room_code = user_rooms.get(user_id)
-    answer_text = data.get('answer_text')
-    question_index = data.get('question_index')
-
+    
     if not room_code or room_code not in active_rooms:
-        emit('error', {'message': 'Room not found'})
         return
 
     room = active_rooms[room_code]
-    if room['state'] != 'playing':
-        emit('error', {'message': 'Game not in progress'})
-        return
-
-    # Stocker la réponse ouverte
+    current_q = room['current_question']  # Utiliser toujours current_question
+    
+    # Initialisation du stockage des réponses
     if 'open_answers' not in room:
         room['open_answers'] = {}
-    
-    if question_index not in room['open_answers']:
-        room['open_answers'][question_index] = []
-    
-    username = user_sessions.get(user_id, 'Anonymous')
-    room['open_answers'][question_index].append({
-        'username': username,
-        'answer': answer_text
-    })
+    if current_q not in room['open_answers']:
+        room['open_answers'][current_q] = []
 
-    # Envoyer la réponse seulement à l'hôte
+    # Enregistrement de la réponse
+    answer_data = {
+        'username': user_sessions.get(user_id, "Anonymous"),
+        'answer': data.get('answer_text', '').strip(),
+        'timestamp': datetime.now().timestamp()
+    }
+    
+    room['open_answers'][current_q].append(answer_data)
+
+    # Envoyer à toute la room
     emit('new_open_answer', {
-        'question_index': question_index,
-        'username': username,
-        'answer': answer_text
-    }, to=room_code)
-
+        'username': answer_data['username'],
+        'answer': answer_data['answer'],
+        'question_index': current_q,  # Envoyer l'index actuel
+        'timestamp': answer_data['timestamp']
+    }, room=room_code)
+    
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)

@@ -49,7 +49,7 @@ def init_db():
         option_d TEXT,
         option_vrai TEXT,  -- Nouveau champ pour les questions vrai/faux
         option_faux TEXT,  -- Nouveau champ pour les questions vrai/faux
-        correct_answer TEXT NOT NULL,
+        correct_answer TEXT ,
         time_limit INTEGER DEFAULT 15,
         points INTEGER DEFAULT 10,
         type TEXT NOT NULL,  
@@ -122,75 +122,122 @@ def create_quiz(title, description, user_id, questions):
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # Insert quiz
-    cursor.execute('''
-    INSERT INTO quizzes (title, description, user_id)
-    VALUES (?, ?, ?)
-    ''', (title, description, user_id))
-    
-    quiz_id = cursor.lastrowid
-    
-    # Insert questions
-    for q in questions:
+    try:
+        # Insert quiz
         cursor.execute('''
-        INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, option_vrai, option_faux, correct_answer, time_limit, points, type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            quiz_id,
-            q['question'],
-            q['option_a'] if q['type'] == 'qcm' else None,
-            q['option_b'] if q['type'] == 'qcm' else None,
-            q['option_c'] if q['type'] == 'qcm' else None,
-            q['option_d'] if q['type'] == 'qcm' else None,
-            'Vrai' if q['type'] == 'true_false' else None,
-            'Faux' if q['type'] == 'true_false' else None,
-            q['correct_answer'],
-            q.get('time_limit', 15),
-            q.get('points', 10),
-            q['type']
-        ))
-    
-    conn.commit()
-    conn.close()
-    return quiz_id
+        INSERT INTO quizzes (title, description, user_id)
+        VALUES (?, ?, ?)
+        ''', (title, description, user_id))
+        
+        quiz_id = cursor.lastrowid
+        
+        # Insert questions
+        for q in questions:
+            # Gestion différenciée selon le type de question
+            if q['type'] == 'open_question':
+                cursor.execute('''
+                INSERT INTO questions 
+                (quiz_id, question, time_limit, points, type, correct_answer)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    quiz_id,
+                    q['question'],
+                    q.get('time_limit', 15),
+                    q.get('points', 10),
+                    q['type'],
+                    None  # Explicitly set correct_answer to NULL for open questions
+                ))
+            else:
+                # Pour QCM et Vrai/Faux
+                if not q.get('correct_answer'):
+                    raise ValueError(f"Question '{q['question']}' is missing correct_answer")
+                
+                cursor.execute('''
+                INSERT INTO questions 
+                (quiz_id, question, option_a, option_b, option_c, option_d, 
+                 option_vrai, option_faux, correct_answer, time_limit, points, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    quiz_id,
+                    q['question'],
+                    q.get('option_a') if q['type'] == 'qcm' else None,
+                    q.get('option_b') if q['type'] == 'qcm' else None,
+                    q.get('option_c') if q['type'] == 'qcm' else None,
+                    q.get('option_d') if q['type'] == 'qcm' else None,
+                    'Vrai' if q['type'] == 'true_false' else None,
+                    'Faux' if q['type'] == 'true_false' else None,
+                    q['correct_answer'],
+                    q.get('time_limit', 15),
+                    q.get('points', 10),
+                    q['type']
+                ))
+        
+        conn.commit()
+        return quiz_id
+        
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
 
 def update_quiz(quiz_id, title, description, questions):
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Mettre à jour le quiz
-    cursor.execute('''
-    UPDATE quizzes
-    SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP
-    WHERE id = ?
-    ''', (title, description, quiz_id))
-
-    # Supprimer les anciennes questions
-    cursor.execute('DELETE FROM questions WHERE quiz_id = ?', (quiz_id,))
-
-    # Réinsérer les nouvelles questions
-    for q in questions:
+    try:
+        # Update quiz metadata
         cursor.execute('''
-        INSERT INTO questions (quiz_id, question, option_a, option_b, option_c, option_d, option_vrai, option_faux, correct_answer, time_limit, points, type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            quiz_id,
-            q['question'],
-            q['option_a'] if q['type'] == 'qcm' else None,
-            q['option_b'] if q['type'] == 'qcm' else None,
-            q['option_c'] if q['type'] == 'qcm' else None,
-            q['option_d'] if q['type'] == 'qcm' else None,
-            'Vrai' if q['type'] == 'true_false' else None,
-            'Faux' if q['type'] == 'true_false' else None,
-            q['correct_answer'],
-            q.get('time_limit', 15),
-            q.get('points', 10),
-            q['type']
-        ))
+        UPDATE quizzes
+        SET title = ?, description = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        ''', (title, description, quiz_id))
 
-    conn.commit()
-    conn.close()
-    return True
+        # Delete old questions
+        cursor.execute('DELETE FROM questions WHERE quiz_id = ?', (quiz_id,))
+
+        # Insert new questions with type-specific handling
+        for q in questions:
+            if q['type'] == 'open_question':
+                cursor.execute('''
+                INSERT INTO questions 
+                (quiz_id, question, time_limit, points, type)
+                VALUES (?, ?, ?, ?, ?)
+                ''', (
+                    quiz_id,
+                    q['question'],
+                    q.get('time_limit', 15),
+                    q.get('points', 10),
+                    q['type']
+                ))
+            else:
+                # Handle QCM and true/false questions
+                cursor.execute('''
+                INSERT INTO questions 
+                (quiz_id, question, option_a, option_b, option_c, option_d, 
+                 correct_answer, time_limit, points, type)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    quiz_id,
+                    q['question'],
+                    q.get('option_a'),
+                    q.get('option_b'),
+                    q.get('option_c') if q['type'] == 'qcm' else None,
+                    q.get('option_d') if q['type'] == 'qcm' else None,
+                    q.get('correct_answer'),
+                    q.get('time_limit', 15),
+                    q.get('points', 10),
+                    q['type']
+                ))
+        
+        conn.commit()
+        return True
+        
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
 
 
 def delete_quiz(quiz_id):

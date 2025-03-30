@@ -6,14 +6,14 @@ import { Plus, Trash, Save, ArrowLeft, Clock, Award } from 'lucide-react';
 
 interface QuestionForm {
   question: string;
-  option_a: string;
-  option_b: string;
-  option_c: string;
-  option_d: string;
-  correct_answer: string;
+  option_a?: string;  // Rendre optionnel
+  option_b?: string;
+  option_c?: string;
+  option_d?: string;
+  correct_answer?: string;  // Rendre optionnel
   time_limit: number;
   points: number;
-  type: 'qcm' | 'true_false';  // Nouveau champ
+  type: 'qcm' | 'true_false' | 'open_question'; // Ajouter le nouveau type
 }
 
 const emptyQuestion: QuestionForm = {
@@ -70,6 +70,13 @@ const QuizCreator: React.FC = () => {
         currentQ.option_c = '';
         currentQ.option_d = '';
         currentQ.correct_answer = ''; // Réinitialiser la bonne réponse
+      } else if(value === 'open_question'){
+        // Supprimer les options pour les questions ouvertes
+        delete currentQ.option_a;
+        delete currentQ.option_b;
+        delete currentQ.option_c;
+        delete currentQ.option_d;
+        delete currentQ.correct_answer;
       } else {
         // Réinitialiser les options pour QCM
         currentQ.option_a = '';
@@ -91,7 +98,6 @@ const QuizCreator: React.FC = () => {
     e.preventDefault();
     setError('');
   
-    // Validation
     if (!title.trim()) {
       setError('Quiz title is required');
       return;
@@ -100,19 +106,26 @@ const QuizCreator: React.FC = () => {
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
   
-      // Vérifier les champs obligatoires pour toutes les questions
-      if (!q.question.trim() || !q.option_a.trim() || !q.option_b.trim() || !q.correct_answer) {
-        setError(`Question ${i + 1} is incomplete`);
+      if (!q.question.trim()) {
+        setError(`Question ${i + 1} is incomplete (missing question text)`);
         setCurrentQuestion(i);
         return;
       }
   
-      // Pour les QCM uniquement, vérifier les options C et D
-      if (q.type === 'qcm' && (!q.option_c.trim() || !q.option_d.trim())) {
-        setError(`Question ${i + 1} is incomplete`);
-        setCurrentQuestion(i);
-        return;
+      if (q.type === 'qcm') {
+        if (!q.option_a?.trim() || !q.option_b?.trim() || !q.option_c?.trim() || !q.option_d?.trim()) {
+          setError(`Question ${i + 1} is incomplete (all options must be filled for QCM)`);
+          setCurrentQuestion(i);
+          return;
+        }
+      } else if (q.type === 'true_false') {
+        if (q.correct_answer !== 'Vrai' && q.correct_answer !== 'Faux') {
+          setError(`Question ${i + 1} is invalid (correct answer must be 'Vrai' or 'Faux')`);
+          setCurrentQuestion(i);
+          return;
+        }
       }
+      // Pas de validation spécifique pour les questions ouvertes
     }
   
     setLoading(true);
@@ -122,10 +135,25 @@ const QuizCreator: React.FC = () => {
         title,
         description,
         user_id: user?.id,
-        questions: questions.map((q) => ({
-          ...q,
-          option_c: q.type === 'true_false' ? '' : q.option_c, // Option C vide pour Vrai/Faux
-          option_d: q.type === 'true_false' ? '' : q.option_d, // Option D vide pour Vrai/Faux
+        questions: questions.map(q => ({
+          question: q.question,
+          type: q.type,
+          time_limit: q.time_limit,
+          points: q.points,
+          // Seulement inclure les champs nécessaires selon le type
+          ...(q.type === 'qcm' && {
+            option_a: q.option_a,
+            option_b: q.option_b,
+            option_c: q.option_c,
+            option_d: q.option_d,
+            correct_answer: q.correct_answer
+          }),
+          ...(q.type === 'true_false' && {
+            option_a: 'Vrai',
+            option_b: 'Faux',
+            correct_answer: q.correct_answer
+          })
+          // Pas de champs supplémentaires pour les questions ouvertes
         })),
       });
   
@@ -239,6 +267,7 @@ const QuizCreator: React.FC = () => {
               >
                 <option value="qcm">QCM</option>
                 <option value="true_false">Vrai/Faux</option>
+                <option value="open_question">Question ouverte</option>
               </select>
             </div>
             
@@ -256,18 +285,22 @@ const QuizCreator: React.FC = () => {
               />
             </div>
             
+            {questions[currentQuestion].type !== 'open_question' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {/* Options A et B */}
               <div>
                 <label className="block text-gray-700 text-sm font-bold mb-2">
                   Option A
                 </label>
                 <input
                   type="text"
-                  value={questions[currentQuestion].type === 'true_false' ? 'Vrai' : questions[currentQuestion].option_a}
+                  value={questions[currentQuestion].type === 'true_false' 
+                    ? 'Vrai' 
+                    : questions[currentQuestion].option_a || ''}
                   onChange={(e) => updateQuestion('option_a', e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   placeholder="Option A"
-                  required
+                  required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
                   disabled={questions[currentQuestion].type === 'true_false'}
                 />
               </div>
@@ -277,14 +310,18 @@ const QuizCreator: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  value={questions[currentQuestion].type === 'true_false' ? 'Faux' : questions[currentQuestion].option_b}
+                  value={questions[currentQuestion].type === 'true_false' 
+                    ? 'Faux' 
+                    : questions[currentQuestion].option_b || ''}
                   onChange={(e) => updateQuestion('option_b', e.target.value)}
                   className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                   placeholder="Option B"
-                  required
+                  required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
                   disabled={questions[currentQuestion].type === 'true_false'}
                 />
               </div>
+
+              {/* Options C et D (uniquement pour QCM) */}
               {questions[currentQuestion].type === 'qcm' && (
                 <>
                   <div>
@@ -293,7 +330,7 @@ const QuizCreator: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={questions[currentQuestion].option_c}
+                      value={questions[currentQuestion].option_c || ''}
                       onChange={(e) => updateQuestion('option_c', e.target.value)}
                       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                       placeholder="Option C"
@@ -306,7 +343,7 @@ const QuizCreator: React.FC = () => {
                     </label>
                     <input
                       type="text"
-                      value={questions[currentQuestion].option_d}
+                      value={questions[currentQuestion].option_d || ''}
                       onChange={(e) => updateQuestion('option_d', e.target.value)}
                       className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                       placeholder="Option D"
@@ -316,33 +353,36 @@ const QuizCreator: React.FC = () => {
                 </>
               )}
             </div>
+            )}
             
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-bold mb-2">
-                Correct Answer
-              </label>
-              <select
-                value={questions[currentQuestion].correct_answer}
-                onChange={(e) => updateQuestion('correct_answer', e.target.value)}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                required
-              >
-                <option value="">Select correct answer</option>
-                {questions[currentQuestion].type === 'true_false' ? (
-                  <>
-                    <option value="Vrai">Vrai</option>
-                    <option value="Faux">Faux</option>
-                  </>
-                ) : (
-                  <>
-                    <option value={questions[currentQuestion].option_a}>Option A: {questions[currentQuestion].option_a}</option>
-                    <option value={questions[currentQuestion].option_b}>Option B: {questions[currentQuestion].option_b}</option>
-                    <option value={questions[currentQuestion].option_c}>Option C: {questions[currentQuestion].option_c}</option>
-                    <option value={questions[currentQuestion].option_d}>Option D: {questions[currentQuestion].option_d}</option>
-                  </>
-                )}
-              </select>
-            </div>
+            {questions[currentQuestion].type !== 'open_question' && (
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">
+                  Correct Answer
+                </label>
+                <select
+                  value={questions[currentQuestion].correct_answer || ''}
+                  onChange={(e) => updateQuestion('correct_answer', e.target.value)}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
+                >
+                  <option value="">Select correct answer</option>
+                  {questions[currentQuestion].type === 'true_false' ? (
+                    <>
+                      <option value="Vrai">Vrai</option>
+                      <option value="Faux">Faux</option>
+                    </>
+                  ) : (
+                    <>
+                      <option value={questions[currentQuestion].option_a}>Option A: {questions[currentQuestion].option_a}</option>
+                      <option value={questions[currentQuestion].option_b}>Option B: {questions[currentQuestion].option_b}</option>
+                      <option value={questions[currentQuestion].option_c}>Option C: {questions[currentQuestion].option_c}</option>
+                      <option value={questions[currentQuestion].option_d}>Option D: {questions[currentQuestion].option_d}</option>
+                    </>
+                  )}
+                </select>
+              </div>
+            )}
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
