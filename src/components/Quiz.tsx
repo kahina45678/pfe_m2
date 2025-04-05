@@ -24,7 +24,7 @@ interface Question {
 type Color = 'red' | 'blue' | 'green' | 'yellow';
 
 const colorClasses: Record<Color, { bg: string; hover: string; selected: string }> = {
-  red: { bg: 'bg-red-500', hover: 'hover:bg-red-600', selected: 'bg-red-800' },
+  red: { bg: 'bg-[#E71722]', hover: 'hover:bg-[#C1121F]', selected: 'bg-[#A00E1A]' },
   blue: { bg: 'bg-blue-500', hover: 'hover:bg-blue-600', selected: 'bg-blue-800' },
   green: { bg: 'bg-green-500', hover: 'hover:bg-green-600', selected: 'bg-green-800' },
   yellow: { bg: 'bg-yellow-500', hover: 'hover:bg-yellow-600', selected: 'bg-yellow-800' },
@@ -223,9 +223,9 @@ const Quiz: React.FC = () => {
     return (
       <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-red-800">Waiting Room</h2>
+          <h2 className="text-3xl font-bold text-[#E71722]">Waiting Room</h2>
           <div className="flex items-center">
-            <Users size={20} className="mr-2 text-red-800" />
+            <Users size={20} className="mr-2 text-[#E71722]" />
             <span className="font-semibold">{filteredPlayers.length} Players</span>
           </div>
         </div>
@@ -237,21 +237,21 @@ const Quiz: React.FC = () => {
         )}
 
         <div className="mb-6">
-          <div className="bg-red-50 p-4 rounded-lg mb-4 flex justify-between items-center">
+          <div className="bg-[#E71722]/10 p-4 rounded-lg mb-4 flex justify-between items-center">
             <div>
-              <h3 className="font-semibold text-red-700">Room Code</h3>
+              <h3 className="font-semibold text-[#E71722]">Room Code</h3>
               <p className="text-gray-700 font-mono text-xl">{roomCode}</p>
             </div>
             <div className="flex space-x-2">
               <button
                 onClick={() => navigator.clipboard.writeText(roomCode || '')}
-                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded"
+                className="bg-[#E71722]/20 hover:bg-[#E71722]/30 text-[#E71722] px-3 py-1 rounded transition-colors"
               >
                 Copy
               </button>
               <button
                 onClick={toggleQRCode}
-                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1 rounded flex items-center"
+                className="bg-[#E71722]/20 hover:bg-[#E71722]/30 text-[#E71722] px-3 py-1 rounded flex items-center transition-colors"
               >
                 <QrCode size={16} className="mr-1" />
                 QR
@@ -284,14 +284,16 @@ const Quiz: React.FC = () => {
             <button
               onClick={handleStartGame}
               disabled={filteredPlayers.length < 1}
-              className="flex-1 bg-red-800 hover:bg-red-900 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-red-300"
+              className={`flex-1 bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline transition-colors ${
+                filteredPlayers.length < 1 ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
             >
               Start Quiz
             </button>
           )}
           <button
             onClick={handleLeaveGame}
-            className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline"
+            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
           >
             Leave Room
           </button>
@@ -307,10 +309,10 @@ if (gameState === 'playing') {
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
       {/* Header avec numéro de question et timer - Visible par tous */}
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-red-800">
+        <h2 className="text-2xl font-bold text-[#E71722]">
           Question {currentQuestion?.question_number} of {currentQuestion?.total_questions}
         </h2>
-        <div className="flex items-center bg-red-100 text-red-800 px-3 py-1 rounded-full">
+        <div className="flex items-center bg-[#E71722]/10 text-[#E71722] px-3 py-1 rounded-full">
           <Clock size={18} className="mr-1" />
           <span className="font-semibold">{timeLeft}s</span>
         </div>
@@ -327,8 +329,8 @@ if (gameState === 'playing') {
       {/* Zone de réponse - Affichage radicalement différent selon host/joueur */}
       {isHost ? (
         /* AFFICHAGE HÔTE - Question complète + réponses */
-        <div className="bg-red-50 p-6 rounded-lg mb-6">
-          <h3 className="text-xl font-semibold text-gray-800 mb-2">
+        <div className="bg-[#E71722]/10 p-6 rounded-lg mb-6">
+          <h3 className="text-xl font-semibold text-gray-800 mb-4 whitespace-pre-wrap break-words min-h-[100px] max-h-[200px] overflow-y-auto">
             {currentQuestion?.question}
           </h3>
           
@@ -345,7 +347,7 @@ if (gameState === 'playing') {
                           {new Date().toLocaleTimeString()}
                         </span>
                       </div>
-                      <p className="text-gray-700 mt-1 pl-2 border-l-2 border-blue-400">
+                      <p className="text-gray-700 mt-1 pl-2 border-l-2 border-blue-400 whitespace-pre-wrap break-words">
                         {response.answer}
                       </p>
                     </div>
@@ -385,7 +387,7 @@ if (gameState === 'playing') {
         </div>
       ) : (
         /* AFFICHAGE JOUEUR - Uniquement le champ de réponse */
-        <div className="bg-red-50 p-6 rounded-lg mb-6">
+        <div className="bg-[#E71722]/10 p-6 rounded-lg mb-6">
           <h3 className="text-xl font-semibold text-gray-800 mb-4">Your answer:</h3>
           
           {currentQuestion?.type === 'open_question' ? (
@@ -399,7 +401,7 @@ if (gameState === 'playing') {
                 <textarea
                   value={openAnswer}
                   onChange={(e) => setOpenAnswer(e.target.value)}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                  className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E71722]"
                   placeholder="Écrivez votre réponse ici..."
                   rows={4}
                   disabled={!canAnswer}
@@ -407,10 +409,10 @@ if (gameState === 'playing') {
                 <button
                   onClick={handleSubmitOpenAnswer}
                   disabled={!openAnswer.trim() || !canAnswer}
-                  className={`mt-3 bg-red-800 text-white font-bold py-2 px-6 rounded-lg transition-all ${
+                  className={`mt-3 bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-6 rounded-lg transition-all ${
                     !openAnswer.trim() || !canAnswer 
                       ? 'opacity-50 cursor-not-allowed' 
-                      : 'hover:bg-red-900'
+                      : ''
                   }`}
                 >
                   Envoyer
@@ -505,14 +507,14 @@ if (gameState === 'playing') {
                   }`}
                 >
                   <p className="font-medium">{player.username}</p>
-                  <p className="text-red-800 font-bold">{player.score} pts</p>
+                  <p className="text-[#E71722] font-bold">{player.score} pts</p>
                 </div>
               ))}
           </div>
         ) : (
           <div className="bg-white p-3 rounded border border-gray-200">
             <p className="font-medium">Your Score</p>
-            <p className="text-red-800 font-bold">{players.find((p) => p.id === socket?.id)?.score || 0} pts</p>
+            <p className="text-[#E71722] font-bold">{players.find((p) => p.id === socket?.id)?.score || 0} pts</p>
           </div>
         )}
       </div>
@@ -522,7 +524,7 @@ if (gameState === 'playing') {
         <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
           <button
             onClick={handleNextQuestion}
-            className="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center transition-all transform hover:scale-105"
+            className="w-full bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center transition-all transform hover:scale-105"
           >
             {currentQuestion?.question_number === currentQuestion?.total_questions
               ? 'Voir les résultats finaux'
@@ -538,12 +540,12 @@ if (gameState === 'playing') {
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-red-800 mb-2">Quiz Completed!</h2>
+        <h2 className="text-3xl font-bold text-[#E71722] mb-2">Quiz Completed!</h2>
         <p className="text-gray-600">Here are the final results</p>
       </div>
 
       <div className="mb-8">
-        <h3 className="text-xl font-semibold text-red-700 mb-4 flex items-center justify-center">
+        <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center justify-center">
           <Award size={24} className="mr-2" />
           Final Standings
         </h3>
@@ -575,7 +577,7 @@ if (gameState === 'playing') {
                           ? 'bg-gray-500 text-white'
                           : index === 2
                           ? 'bg-amber-500 text-white'
-                          : 'bg-red-100 text-red-800'
+                          : 'bg-[#E71722]/10 text-[#E71722]'
                       }`}
                     >
                       {index + 1}
@@ -596,7 +598,7 @@ if (gameState === 'playing') {
                   className="p-4 rounded-lg flex items-center justify-between bg-white border border-gray-200"
                 >
                   <div className="flex items-center">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center mr-3 bg-red-100 text-red-800">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center mr-3 bg-[#E71722]/10 text-[#E71722]">
                       {index + 1}
                     </div>
                     <span className="font-medium">{player.username}</span>
@@ -612,7 +614,7 @@ if (gameState === 'playing') {
       <div className="flex space-x-4">
         <button
           onClick={handleLeaveGame}
-          className="flex-1 bg-red-800 hover:bg-red-900 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline"
+          className="flex-1 bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
         >
           Return to Home
         </button>

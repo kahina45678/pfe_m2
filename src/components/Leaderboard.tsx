@@ -60,7 +60,7 @@ const Leaderboard: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-red-800 mb-2 flex items-center justify-center"> {/* Rouge foncé */}
+        <h2 className="text-3xl font-bold text-[#E71722] mb-2 flex items-center justify-center">
           <Trophy size={28} className="mr-2" />
           Leaderboard
         </h2>
@@ -101,7 +101,7 @@ const Leaderboard: React.FC = () => {
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {leaderboard.map((entry, index) => (
-                <tr key={index} className={index < 3 ? 'bg-red-50' : ''}> {/* Rouge clair */}
+                <tr key={index} className={index < 3 ? 'bg-[#FFEBEE]' : ''}> {/* Light red background for top 3 */}
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
                       {index === 0 ? (
@@ -122,7 +122,7 @@ const Leaderboard: React.FC = () => {
                     <div className="text-sm text-gray-700">{entry.quiz_title}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-bold text-red-800">{entry.score} pts</div> {/* Rouge foncé */}
+                    <div className="text-sm font-bold text-[#E71722]">{entry.score} pts</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex items-center">

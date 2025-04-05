@@ -34,7 +34,7 @@ const emptyQuestion: QuestionForm = {
   correct_answer: '',
   time_limit: 15,
   points: 10,
-  type: 'qcm', // Valeur par défaut
+  type: 'qcm',
 };
 
 const QuizEditor: React.FC = () => {
@@ -59,7 +59,6 @@ const QuizEditor: React.FC = () => {
       const response = await axios.get(`http://localhost:5000/api/quizzes/${quizId}`);
       const quiz: Quiz = response.data.quiz;
 
-      // Vérifier si l'utilisateur est le propriétaire
       if (quiz.user_id !== user?.id) {
         setError('You do not have permission to edit this quiz');
         return;
@@ -71,7 +70,7 @@ const QuizEditor: React.FC = () => {
         quiz.questions.length > 0
           ? quiz.questions.map((q) => ({
               ...q,
-              type: q.type , // Assurer que le type est défini
+              type: q.type,
             }))
           : [{ ...emptyQuestion }]
       );
@@ -146,13 +145,11 @@ const QuizEditor: React.FC = () => {
   
     setQuestions(updatedQuestions);
   };
-  
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
   
-    // Validation
     if (!title.trim()) {
       setError('Quiz title is required');
       return;
@@ -185,7 +182,6 @@ const QuizEditor: React.FC = () => {
           return;
         }
       }
-      // No validation for open questions
     }
   
     setLoading(true);
@@ -211,7 +207,6 @@ const QuizEditor: React.FC = () => {
             option_b: 'Faux',
             correct_answer: q.correct_answer
           })
-          // No additional fields for open questions
         })),
       });
   
@@ -221,9 +216,6 @@ const QuizEditor: React.FC = () => {
       setLoading(false);
     }
   };
-
-
-
 
   if (initialLoading) {
     return (
@@ -244,11 +236,11 @@ const QuizEditor: React.FC = () => {
       <div className="flex items-center mb-6">
         <button
           onClick={() => navigate('/quizzes')}
-          className="mr-4 text-red-800 hover:text-red-900"
+          className="mr-4 text-[#E71722] hover:text-[#C1121F] transition-colors"
         >
           <ArrowLeft size={24} />
         </button>
-        <h2 className="text-3xl font-bold text-red-800">Edit Quiz</h2>
+        <h2 className="text-3xl font-bold text-[#E71722]">Edit Quiz</h2>
       </div>
 
       {error && (
@@ -293,7 +285,7 @@ const QuizEditor: React.FC = () => {
             <button
               type="button"
               onClick={addQuestion}
-              className="flex items-center bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+              className="flex items-center bg-[#E71722] hover:bg-[#C1121F] text-white px-3 py-1 rounded text-sm transition-colors"
             >
               <Plus size={16} className="mr-1" />
               Add Question
@@ -306,9 +298,9 @@ const QuizEditor: React.FC = () => {
                 key={index}
                 type="button"
                 onClick={() => setCurrentQuestion(index)}
-                className={`flex items-center justify-center min-w-[40px] h-10 mx-1 rounded-full ${
+                className={`flex items-center justify-center min-w-[40px] h-10 mx-1 rounded-full transition-colors ${
                   currentQuestion === index
-                    ? 'bg-red-800 text-white'
+                    ? 'bg-[#E71722] text-white'
                     : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                 }`}
               >
@@ -323,7 +315,7 @@ const QuizEditor: React.FC = () => {
               <button
                 type="button"
                 onClick={() => removeQuestion(currentQuestion)}
-                className="flex items-center text-red-600 hover:text-red-800"
+                className="flex items-center text-[#E71722] hover:text-[#C1121F] transition-colors"
                 title="Remove Question"
               >
                 <Trash size={18} />
@@ -350,14 +342,17 @@ const QuizEditor: React.FC = () => {
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Question Text
               </label>
-              <input
-                type="text"
+              <textarea
                 value={questions[currentQuestion].question}
                 onChange={(e) => updateQuestion('question', e.target.value)}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline min-h-[100px]"
                 placeholder="Enter your question"
                 required
+                maxLength={500}
               />
+              <div className="text-right text-sm text-gray-500">
+                {questions[currentQuestion].question.length}/500
+              </div>
             </div>
 
             {questions[currentQuestion].type !== 'open_question' && (
@@ -514,7 +509,7 @@ const QuizEditor: React.FC = () => {
           <button
             type="submit"
             disabled={loading}
-            className="flex items-center bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+            className="flex items-center bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
           >
             <Save size={18} className="mr-2" />
             {loading ? 'Saving...' : 'Save Changes'}

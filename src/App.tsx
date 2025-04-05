@@ -27,7 +27,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br flex flex-col">
-      <header className="bg-red-800 text-white p-4 shadow-md">
+      <header className="bg-[#E71722] text-white p-4 shadow-md">
         <div className="container mx-auto flex justify-between items-center">
           {/* Logo et titre (cliquables) */}
           <div
@@ -85,9 +85,7 @@ function App() {
           <Route
             path="/quiz/:roomCode"
             element={
-             
-                <Quiz />
-             
+              <Quiz />
             }
           />
           <Route
@@ -109,7 +107,7 @@ function App() {
         </Routes>
       </main>
 
-      <footer className="bg-red-900 text-white p-4 mt-auto">
+      <footer className="bg-[#E71722] text-white p-4 mt-auto">
         <div className="container mx-auto text-center">
           <p>© 2025 QuizMaster - Real-time Quiz Application</p>
         </div>

@@ -103,10 +103,10 @@ const Home: React.FC = () => {
     <div className="max-w-4xl mx-auto">
       <div className="bg-white rounded-xl shadow-md overflow-hidden p-8 mb-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-red-700">Welcome, {user?.username}!</h2> {/* Rouge foncé */}
+          <h2 className="text-3xl font-bold text-[#E71722]">Welcome, {user?.username}!</h2> {/* Nouvelle couleur */}
           <button
             onClick={handleLogout}
-            className="flex items-center bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded" 
+            className="flex items-center bg-[#E71722] hover:bg-[#C1121F] text-white px-4 py-2 rounded transition-colors" 
           >
             <LogOut size={18} className="mr-2" />
             Logout
@@ -120,8 +120,8 @@ const Home: React.FC = () => {
         )}
         
         <div className="grid md:grid-cols-2 gap-8">
-          <div className="bg-red-50 p-6 rounded-lg"> {/* Rouge clair */}
-            <h3 className="text-xl font-semibold text-red-700 mb-4 flex items-center"> {/* Rouge foncé */}
+          <div className="bg-red-50 p-6 rounded-lg">
+            <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center"> {/* Nouvelle couleur */}
               <Play size={24} className="mr-2" />
               Host a Quiz
             </h3>
@@ -149,25 +149,26 @@ const Home: React.FC = () => {
               <button
                 onClick={handleCreateRoom}
                 disabled={loading || !selectedQuiz}
-                className="flex-1 bg-red-700 hover:bg-red-800 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-red-300" 
+                className="flex-1 bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-red-300 transition-colors" 
               >
                 {loading ? 'Creating...' : 'Create Room'}
               </button>
               
               <button
                 onClick={() => navigate('/quizzes/create')}
-                className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline"
+                className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
               >
                 <Plus size={20} />
               </button>
             </div>
           </div>
+          
         </div>
       </div>
       
       <div className="grid md:grid-cols-2 gap-8">
         <div className="bg-white rounded-xl shadow-md overflow-hidden p-8">
-          <h3 className="text-xl font-semibold text-red-700 mb-4 flex items-center"> {/* Rouge foncé */}
+          <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center">
             <BookOpen size={24} className="mr-2" />
             My Quizzes
           </h3>
@@ -176,14 +177,14 @@ const Home: React.FC = () => {
           </p>
           <button
             onClick={() => navigate('/quizzes')}
-            className="bg-gradient-to-r from-red-700 to-red-800 hover:from-red-800 hover:to-red-900 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full" 
           >
             View My Quizzes
           </button>
         </div>
         
         <div className="bg-white rounded-xl shadow-md overflow-hidden p-8">
-          <h3 className="text-xl font-semibold text-red-700 mb-4 flex items-center"> 
+          <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center">
             <Trophy size={24} className="mr-2" />
             Leaderboard
           </h3>
@@ -192,7 +193,7 @@ const Home: React.FC = () => {
           </p>
           <button
             onClick={() => navigate('/leaderboard')}
-            className="bg-gradient-to-r from-red-700 to-red-800 hover:from-red-800 hover:to-red-900 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" 
+            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full" 
           >
             View Leaderboard
           </button>

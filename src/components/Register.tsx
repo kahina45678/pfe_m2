@@ -40,7 +40,7 @@ const Register: React.FC = () => {
   return (
     <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-8">
       <div className="text-center mb-8">
-        <h2 className="text-3xl font-bold text-red-800">Register</h2> {/* Rouge foncé */}
+        <h2 className="text-3xl font-bold text-[#E71722]">Register</h2> {/* Nouvelle couleur */}
         <p className="text-gray-600 mt-2">Create your QuizMaster account</p>
       </div>
       
@@ -99,7 +99,7 @@ const Register: React.FC = () => {
         <div className="flex items-center justify-between">
           <button
             type="submit"
-            className="bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full" 
+            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full transition-colors"
             disabled={loading}
           >
             {loading ? 'Registering...' : 'Register'}
@@ -109,7 +109,7 @@ const Register: React.FC = () => {
         <div className="text-center mt-6">
           <p className="text-sm text-gray-600">
             Already have an account?{' '}
-            <Link to="/login" className="text-red-800 hover:text-red-900"> {/* Rouge foncé */}
+            <Link to="/login" className="text-[#E71722] hover:text-[#C1121F] transition-colors">
               Login here
             </Link>
           </p>
