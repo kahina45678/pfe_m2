@@ -563,5 +563,25 @@ def handle_submit_open_answer(data):
     }, room=room_code)
 
 
+@socketio.on('get_player_answers')
+def handle_get_player_answers(data):
+    room_code = data.get('room_code')
+    if not room_code or room_code not in active_rooms:
+        return
+
+    room = active_rooms[room_code]
+    current_q = room['current_question']
+    answers = {}
+
+    for player_id, player in room['players'].items():
+        if current_q in player['answers']:
+            answers[player_id] = {
+                'username': player['username'],
+                'answer': player['answers'][current_q]
+            }
+
+    emit('player_answers', {'answers': answers}, room=room_code)
+
+
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
