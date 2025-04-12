@@ -15,6 +15,7 @@ from db import (
 )
 
 # Initialize Flask app
+
 app = Flask(__name__)
 app.secret_key = 'quiz_app_secret_key'  # Change this in production
 CORS(app, supports_credentials=True)
@@ -233,7 +234,7 @@ def send_question(room_code):
             question.get('option_c'),
             question.get('option_d')
         ]
-            
+
     # Envoyer la question à tous les joueurs
     socketio.emit('new_question', {
         'question_number': current_q + 1,
@@ -247,14 +248,17 @@ def send_question(room_code):
 
     # Démarrer un timer pour la question (mais ne pas passer automatiquement à la suivante)
     def start_timer(room_code, time_limit):
-        print(f"[DEBUG] Starting timer for question {current_q + 1} in room {room_code}")
+        print(
+            f"[DEBUG] Starting timer for question {current_q + 1} in room {room_code}")
         socketio.sleep(time_limit)
-        print(f"[DEBUG] Timer expired for question {current_q + 1} in room {room_code}")
-        socketio.emit('time_up', to=room_code)  # Juste notifier que le temps est écoulé
+        print(
+            f"[DEBUG] Timer expired for question {current_q + 1} in room {room_code}")
+        # Juste notifier que le temps est écoulé
+        socketio.emit('time_up', to=room_code)
 
     if room_code in timers:
         timers[room_code].join()  # Arrêter le timer précédent s'il existe
-        
+
     timers[room_code] = socketio.start_background_task(
         start_timer, room_code, question.get('time_limit', 15))
 
@@ -316,7 +320,7 @@ def handle_create_room(data):
     # Créer la salle sans ajouter l'hôte à la liste des joueurs
     active_rooms[room_code] = {
         'host': username,  # Stocker l'hôte séparément
-        'host_id': user_id,
+        'host_id': str(user_id),
         'quiz_id': quiz_id,
         'players': {},  # Liste des joueurs (sans l'hôte)
         'questions': quiz['questions'],
@@ -325,8 +329,12 @@ def handle_create_room(data):
         'start_time': None
     }
 
+    print(f"[DEBUG] Room created. Host ID: {user_id} (type: {type(user_id)})")
+    print(f"[DEBUG] Initial players dict: {active_rooms[room_code]['players']}")
+
     emit('room_created', {'room_code': room_code, 'is_host': True})
-    emit('player_joined', {'players': []}, to=room_code)  # Aucun joueur au départ
+    emit('player_joined', {'players': []},
+         to=room_code)  # Aucun joueur au départ
 
 
 @socketio.on('join_room')
@@ -335,14 +343,16 @@ def handle_join_room(data):
     username = data.get('username')  # Pseudo du joueur
     room_code = data.get('room_code')
 
-    print(f"[DEBUG] User {username} (ID: {user_id}) is trying to join room {room_code}")
+    print(
+        f"[DEBUG] User {username} (ID: {user_id}) is trying to join room {room_code}")
 
     if room_code not in active_rooms:
         room = get_room_by_code(room_code)
         if not room:
             emit('error', {'message': 'Room not found'})
             return
-        emit('error', {'message': 'Room exists but host has not started the session yet'})
+        emit(
+            'error', {'message': 'Room exists but host has not started the session yet'})
         return
 
     if active_rooms[room_code]['state'] != 'waiting':
@@ -364,10 +374,12 @@ def handle_join_room(data):
     players_list = [
         {'id': pid, 'username': player['username'], 'score': player['score']}
         for pid, player in active_rooms[room_code]['players'].items()
-        if player['username'] != active_rooms[room_code]['host']  # Exclure l'hôte
+        # Exclure l'hôte
+        if player['username'] != active_rooms[room_code]['host']
     ]
 
-    emit('player_joined', {'players': players_list}, to=room_code)  # Envoyer à tous dans la salle
+    emit('player_joined', {'players': players_list},
+         to=room_code)  # Envoyer à tous dans la salle
 
 
 @socketio.on('start_game')
@@ -390,7 +402,8 @@ def handle_start_game(data):
 
     active_rooms[room_code]['state'] = 'playing'
     active_rooms[room_code]['start_time'] = datetime.now().timestamp()
-    active_rooms[room_code]['current_question'] = 0  # Commencer à la première question
+    # Commencer à la première question
+    active_rooms[room_code]['current_question'] = 0
 
     # Émettez l'événement game_started
     emit('game_started', to=room_code)
@@ -413,7 +426,7 @@ def handle_submit_answer(data):
     if room['state'] != 'playing':
         emit('error', {'message': 'Game not in progress'})
         return
-    
+
     if hasattr(room, 'time_elapsed') and room.time_elapsed:
         emit('error', {'message': 'Time has elapsed, cannot submit answer'})
         return
@@ -428,7 +441,8 @@ def handle_submit_answer(data):
     if question['type'] == 'true_false':
         options = ['Vrai', 'Faux']
     else:
-        options = [question['option_a'], question['option_b'], question['option_c'], question['option_d']]
+        options = [question['option_a'], question['option_b'],
+                   question['option_c'], question['option_d']]
 
     # Vérifier si la réponse est correcte
     is_correct = options[answer] == question['correct_answer']
@@ -449,8 +463,12 @@ def handle_submit_answer(data):
     players_list = [
         {'id': pid, 'username': player['username'], 'score': player['score']}
         for pid, player in room['players'].items()
+        if str(pid) != str(room['host_id'])
     ]
+
+    
     emit('update_scores', {'players': players_list}, to=room_code)
+
 
 @socketio.on('next_question')
 def handle_next_question(data):
@@ -482,7 +500,8 @@ def handle_next_question(data):
     room['current_question'] += 1
 
     if room['current_question'] < len(room['questions']):
-        print(f"[DEBUG] Sending next question ({room['current_question'] + 1}) to room {room_code}")
+        print(
+            f"[DEBUG] Sending next question ({room['current_question'] + 1}) to room {room_code}")
         send_question(room_code)
     else:
         print(f"[DEBUG] Ending game in room {room_code}")
@@ -514,17 +533,18 @@ def handle_next_question(data):
         if room_code in timers:
             del timers[room_code]
 
+
 @socketio.on('submit_open_answer')
 def handle_submit_open_answer(data):
     user_id = request.sid
     room_code = user_rooms.get(user_id)
-    
+
     if not room_code or room_code not in active_rooms:
         return
 
     room = active_rooms[room_code]
     current_q = room['current_question']  # Utiliser toujours current_question
-    
+
     # Initialisation du stockage des réponses
     if 'open_answers' not in room:
         room['open_answers'] = {}
@@ -537,7 +557,7 @@ def handle_submit_open_answer(data):
         'answer': data.get('answer_text', '').strip(),
         'timestamp': datetime.now().timestamp()
     }
-    
+
     room['open_answers'][current_q].append(answer_data)
 
     # Envoyer à toute la room
@@ -547,8 +567,27 @@ def handle_submit_open_answer(data):
         'question_index': current_q,  # Envoyer l'index actuel
         'timestamp': answer_data['timestamp']
     }, room=room_code)
-    
+
+
+@socketio.on('get_player_answers')
+def handle_get_player_answers(data):
+    room_code = data.get('room_code')
+    if not room_code or room_code not in active_rooms:
+        return
+
+    room = active_rooms[room_code]
+    current_q = room['current_question']
+    answers = {}
+
+    for player_id, player in room['players'].items():
+        if current_q in player['answers']:
+            answers[player_id] = {
+                'username': player['username'],
+                'answer': player['answers'][current_q]
+            }
+
+    emit('player_answers', {'answers': answers}, room=room_code)
+
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=True)
-    
