@@ -39,7 +39,6 @@ def init_db():
     )
     ''')
 
-    # Create questions table
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,13 +48,26 @@ def init_db():
         option_b TEXT,
         option_c TEXT,
         option_d TEXT,
-        option_vrai TEXT,  -- Nouveau champ pour les questions vrai/faux
-        option_faux TEXT,  -- Nouveau champ pour les questions vrai/faux
-        correct_answer TEXT ,
+        correct_answer TEXT,
         time_limit INTEGER DEFAULT 15,
         points INTEGER DEFAULT 10,
-        type TEXT NOT NULL,  
+        type TEXT NOT NULL,
+        image_url TEXT,  -- Nouveau champ pour les URLs d'images
+        image_source TEXT,  -- 'unsplash', 'upload', ou 'none'
         FOREIGN KEY (quiz_id) REFERENCES quizzes (id) ON DELETE CASCADE
+    )
+    ''')
+
+    # Table pour stocker les métadonnées des images Unsplash
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS unsplash_photos (
+        id TEXT PRIMARY KEY,
+        question_id INTEGER NOT NULL,
+        regular_url TEXT NOT NULL,
+        thumb_url TEXT NOT NULL,
+        author_name TEXT,
+        author_url TEXT,
+        FOREIGN KEY (question_id) REFERENCES questions (id) ON DELETE CASCADE
     )
     ''')
 
@@ -110,11 +122,43 @@ def get_quiz_by_id(quiz_id):
     if quiz:
         quiz_dict = dict(quiz)
         questions = conn.execute('''
-        SELECT id, question, option_a, option_b, option_c, option_d, correct_answer, time_limit, points, type
-        FROM questions
-        WHERE quiz_id = ?
+        SELECT q.id, q.question, q.option_a, q.option_b, q.option_c, q.option_d, 
+               q.correct_answer, q.time_limit, q.points, q.type, q.image_url, q.image_source,
+               u.id as unsplash_id, u.regular_url, u.thumb_url, u.author_name, u.author_url
+        FROM questions q
+        LEFT JOIN unsplash_photos u ON q.id = u.question_id
+        WHERE q.quiz_id = ?
         ''', (quiz_id,)).fetchall()
-        quiz_dict['questions'] = [dict(q) for q in questions]
+
+        quiz_dict['questions'] = []
+        for q in questions:
+            question = dict(q)
+            if question['image_source'] == 'unsplash':
+                question['image'] = {
+                    'source': 'unsplash',
+                    'urls': {
+                        'regular': question['regular_url'],
+                        'thumb': question['thumb_url']
+                    },
+                    'user': {
+                        'name': question['author_name'],
+                        'links': {
+                            'html': question['author_url']
+                        }
+                    }
+                }
+            elif question['image_source'] == 'upload':
+                question['image'] = {
+                    'source': 'upload',
+                    'path': question['image_url']
+                }
+
+            # Remove unsplash-specific fields from the main question object
+            for field in ['unsplash_id', 'regular_url', 'thumb_url', 'author_name', 'author_url']:
+                question.pop(field, None)
+
+            quiz_dict['questions'].append(question)
+
         conn.close()
         return quiz_dict
 
@@ -127,59 +171,60 @@ def create_quiz(title, description, user_id, questions):
     cursor = conn.cursor()
 
     try:
-        # Insert quiz
         cursor.execute('''
         INSERT INTO quizzes (title, description, user_id)
         VALUES (?, ?, ?)
         ''', (title, description, user_id))
-
         quiz_id = cursor.lastrowid
 
-        # Insert questions
         for q in questions:
-            # Gestion différenciée selon le type de question
-            if q['type'] == 'open_question':
-                cursor.execute('''
-                INSERT INTO questions 
-                (quiz_id, question, time_limit, points, type, correct_answer)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ''', (
-                    quiz_id,
-                    q['question'],
-                    q.get('time_limit', 15),
-                    q.get('points', 10),
-                    q['type'],
-                    None  # Explicitly set correct_answer to NULL for open questions
-                ))
-            else:
-                # Pour QCM et Vrai/Faux
-                if not q.get('correct_answer'):
-                    raise ValueError(
-                        f"Question '{q['question']}' is missing correct_answer")
+            # Insert the question
+            cursor.execute('''
+            INSERT INTO questions 
+            (quiz_id, question, option_a, option_b, option_c, option_d, 
+             correct_answer, time_limit, points, type, image_url, image_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                quiz_id,
+                q['question'],
+                q.get('option_a'),
+                q.get('option_b'),
+                q.get('option_c'),
+                q.get('option_d'),
+                q.get('correct_answer'),
+                q.get('time_limit', 15),
+                q.get('points', 10),
+                q['type'],
+                q.get('image', {}).get('urls', {}).get('regular') if q.get('image', {}).get(
+                    'source') == 'unsplash' else q.get('image', {}).get('path'),
+                q.get('image', {}).get('source', 'none')
+            ))
 
-                cursor.execute('''
-                INSERT INTO questions 
-                (quiz_id, question, option_a, option_b, option_c, option_d, 
-                 option_vrai, option_faux, correct_answer, time_limit, points, type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    quiz_id,
-                    q['question'],
-                    q.get('option_a') if q['type'] == 'qcm' else None,
-                    q.get('option_b') if q['type'] == 'qcm' else None,
-                    q.get('option_c') if q['type'] == 'qcm' else None,
-                    q.get('option_d') if q['type'] == 'qcm' else None,
-                    'Vrai' if q['type'] == 'true_false' else None,
-                    'Faux' if q['type'] == 'true_false' else None,
-                    q['correct_answer'],
-                    q.get('time_limit', 15),
-                    q.get('points', 10),
-                    q['type']
-                ))
+            question_id = cursor.lastrowid
+
+            # Si l'image vient d'Unsplash, stocker les métadonnées
+            if q.get('image', {}).get('source') == 'unsplash':
+                unsplash_data = q.get('image', {})
+                try:
+                    cursor.execute('''
+                    INSERT INTO unsplash_photos 
+                    (id, question_id, regular_url, thumb_url, author_name, author_url)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        unsplash_data.get('id'),
+                        question_id,
+                        unsplash_data.get('urls', {}).get('regular'),
+                        unsplash_data.get('urls', {}).get('thumb'),
+                        unsplash_data.get('user', {}).get('name'),
+                        unsplash_data.get('user', {}).get('links', {}).get(
+                            'html') if unsplash_data.get('user', {}).get('links') else None
+                    ))
+                except KeyError as e:
+                    print(f"Warning: Missing Unsplash metadata - {e}")
+                    continue
 
         conn.commit()
         return quiz_id
-
     except Exception as e:
         conn.rollback()
         raise e
@@ -199,42 +244,57 @@ def update_quiz(quiz_id, title, description, questions):
         WHERE id = ?
         ''', (title, description, quiz_id))
 
-        # Delete old questions
+        # Delete old questions and associated unsplash photos
+        cursor.execute(
+            'DELETE FROM unsplash_photos WHERE question_id IN (SELECT id FROM questions WHERE quiz_id = ?)', (quiz_id,))
         cursor.execute('DELETE FROM questions WHERE quiz_id = ?', (quiz_id,))
 
-        # Insert new questions with type-specific handling
+        # Insert new questions
         for q in questions:
-            if q['type'] == 'open_question':
-                cursor.execute('''
-                INSERT INTO questions 
-                (quiz_id, question, time_limit, points, type)
-                VALUES (?, ?, ?, ?, ?)
-                ''', (
-                    quiz_id,
-                    q['question'],
-                    q.get('time_limit', 15),
-                    q.get('points', 10),
-                    q['type']
-                ))
-            else:
-                # Handle QCM and true/false questions
-                cursor.execute('''
-                INSERT INTO questions 
-                (quiz_id, question, option_a, option_b, option_c, option_d, 
-                 correct_answer, time_limit, points, type)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    quiz_id,
-                    q['question'],
-                    q.get('option_a'),
-                    q.get('option_b'),
-                    q.get('option_c') if q['type'] == 'qcm' else None,
-                    q.get('option_d') if q['type'] == 'qcm' else None,
-                    q.get('correct_answer'),
-                    q.get('time_limit', 15),
-                    q.get('points', 10),
-                    q['type']
-                ))
+            # Insert the question
+            cursor.execute('''
+            INSERT INTO questions 
+            (quiz_id, question, option_a, option_b, option_c, option_d, 
+             correct_answer, time_limit, points, type, image_url, image_source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                quiz_id,
+                q['question'],
+                q.get('option_a'),
+                q.get('option_b'),
+                q.get('option_c') if q['type'] == 'qcm' else None,
+                q.get('option_d') if q['type'] == 'qcm' else None,
+                q.get('correct_answer'),
+                q.get('time_limit', 15),
+                q.get('points', 10),
+                q['type'],
+                q.get('image', {}).get('urls', {}).get('regular') if q.get('image', {}).get(
+                    'source') == 'unsplash' else q.get('image', {}).get('path'),
+                q.get('image', {}).get('source', 'none')
+            ))
+
+            question_id = cursor.lastrowid
+
+            # Si l'image vient d'Unsplash, stocker les métadonnées
+            if q.get('image', {}).get('source') == 'unsplash':
+                unsplash_data = q.get('image', {})
+                try:
+                    cursor.execute('''
+                    INSERT INTO unsplash_photos 
+                    (id, question_id, regular_url, thumb_url, author_name, author_url)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        unsplash_data.get('id'),
+                        question_id,
+                        unsplash_data.get('urls', {}).get('regular'),
+                        unsplash_data.get('urls', {}).get('thumb'),
+                        unsplash_data.get('user', {}).get('name'),
+                        unsplash_data.get('user', {}).get('links', {}).get(
+                            'html') if unsplash_data.get('user', {}).get('links') else None
+                    ))
+                except KeyError as e:
+                    print(f"Warning: Missing Unsplash metadata - {e}")
+                    continue
 
         conn.commit()
         return True

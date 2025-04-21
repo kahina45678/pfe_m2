@@ -4,8 +4,13 @@ from flask_cors import CORS
 import json
 import time
 from datetime import datetime
+import sqlite3
+import requests
 import qrcode
+import os
+from urllib.parse import urlparse
 import io
+from dotenv import load_dotenv
 import base64
 from threading import Timer
 from db import (
@@ -21,6 +26,12 @@ app.secret_key = 'quiz_app_secret_key'  # Change this in production
 CORS(app, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+load_dotenv()
+
+# Configuration Unsplash
+UNSPLASH_KEY = os.environ['UNSPLASH_KEY']
+UNSPLASH_API = "https://api.unsplash.com"
+
 # Initialize database
 init_db()
 
@@ -30,6 +41,44 @@ user_rooms = {}
 timers = {}  # Pour stocker les timers de chaque room
 
 # Routes
+
+
+@app.route('/api/unsplash/search', methods=['GET'])
+def search_unsplash():
+    query = request.args.get('query', '')
+    if not query:
+        return jsonify({"error": "Le paramètre 'query' est requis"}), 400
+
+    try:
+        response = requests.get(
+            f"{UNSPLASH_API}/search/photos",
+            params={
+                "query": query,
+                "per_page": 20,
+                "orientation": "landscape"  # Meilleur pour les quiz
+            },
+            headers={"Authorization": f"Client-ID {UNSPLASH_KEY}"},
+            timeout=5
+        )
+        response.raise_for_status()
+
+        results = response.json()["results"]
+        images = [{
+            "id": img["id"],
+            "urls": {
+                "regular": img["urls"]["regular"],
+                "thumb": img["urls"]["thumb"]
+            },
+            "user": {
+                "name": img["user"]["name"],
+                "profile": img["user"]["links"]["html"]
+            }
+        } for img in results]
+
+        return jsonify({"images": images})
+
+    except requests.RequestException as e:
+        return jsonify({"error": f"Erreur Unsplash: {str(e)}"}), 500
 
 
 @app.route('/api/register', methods=['POST'])
@@ -115,6 +164,21 @@ def add_quiz():
 
     if not title or not user_id or not questions:
         return jsonify({"error": "Title, user ID, and questions are required"}), 400
+
+    # Traitement des images
+    for question in data.get('questions', []):
+        if 'image' in question:
+            if question['image']['source'] == 'unsplash':
+                question['image_url'] = question['image']['urls']['regular']
+                question['image_source'] = 'unsplash'
+                question['unsplash_data'] = {
+                    'id': question['image']['id'],
+                    'urls': question['image']['urls'],
+                    'user': question['image']['user']
+                }
+            elif question['image']['source'] == 'upload':
+                question['image_url'] = question['image']['path']
+                question['image_source'] = 'upload'
 
     quiz_id = create_quiz(title, description, user_id, questions)
     return jsonify({"message": "Quiz created successfully", "quiz_id": quiz_id}), 201
@@ -219,6 +283,17 @@ def send_question(room_code):
 
     print(f"[DEBUG] Sending question {current_q + 1} to room {room_code}")
 
+    # Récupérer les métadonnées Unsplash si besoin
+    unsplash_data = None
+    if question.get('image_source') == 'unsplash':
+        conn = get_db_connection()
+        unsplash_data = conn.execute('''
+        SELECT regular_url, thumb_url, author_name, author_url 
+        FROM unsplash_photos 
+        WHERE question_id = ?
+        ''', (question['id'],)).fetchone()
+        conn.close()
+
     # Réinitialiser les réponses ouvertes pour cette question
     if 'open_answers' in room:
         room['open_answers'][current_q] = []  # Utiliser current_q comme clé
@@ -235,15 +310,23 @@ def send_question(room_code):
             question.get('option_d')
         ]
 
+     # Préparer l'objet image pour l'envoi
+    image_data = None
+    if question.get('image_url'):
+        image_data = {
+            'url': question['image_url'],
+            'source': question.get('image_source', 'none'),
+            'unsplash_data': dict(unsplash_data) if unsplash_data else None
+        }
+
     # Envoyer la question à tous les joueurs
     socketio.emit('new_question', {
         'question_number': current_q + 1,
         'total_questions': len(room['questions']),
         'question': question['question'],
+        'image': image_data,
         'options': options,
-        'time_limit': question.get('time_limit', 15),
-        'start_time': datetime.now().timestamp(),
-        'type': question['type']
+        'time_limit': question.get('time_limit', 15)
     }, room=room_code)
 
     # Démarrer un timer pour la question (mais ne pas passer automatiquement à la suivante)
@@ -320,7 +403,7 @@ def handle_create_room(data):
     # Créer la salle sans ajouter l'hôte à la liste des joueurs
     active_rooms[room_code] = {
         'host': username,  # Stocker l'hôte séparément
-        'host_id': user_id,
+        'host_id': str(user_id),
         'quiz_id': quiz_id,
         'players': {},  # Liste des joueurs (sans l'hôte)
         'questions': quiz['questions'],
@@ -328,6 +411,10 @@ def handle_create_room(data):
         'state': 'waiting',
         'start_time': None
     }
+
+    print(f"[DEBUG] Room created. Host ID: {user_id} (type: {type(user_id)})")
+    print(
+        f"[DEBUG] Initial players dict: {active_rooms[room_code]['players']}")
 
     emit('room_created', {'room_code': room_code, 'is_host': True})
     emit('player_joined', {'players': []},
@@ -460,7 +547,9 @@ def handle_submit_answer(data):
     players_list = [
         {'id': pid, 'username': player['username'], 'score': player['score']}
         for pid, player in room['players'].items()
+        if str(pid) != str(room['host_id'])
     ]
+
     emit('update_scores', {'players': players_list}, to=room_code)
 
 

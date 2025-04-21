@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -24,6 +25,16 @@ interface Question {
   start_time: number;
   type: 'qcm' | 'true_false' | 'open_question';
   correct_answer?: string | number;
+  image?: {
+    url: string;
+    source: 'unsplash' | 'upload' | 'none';
+    unsplash_data?: {
+      regular_url: string;
+      thumb_url: string;
+      author_name: string;
+      author_url: string;
+    };
+  };
 }
 
 const shapes = ['▲', '●', '■', '◆'];
@@ -49,14 +60,11 @@ const PlayerItem = React.memo(({ player, index }: { player: Player; index: numbe
 ));
 
 const Podium = ({ players }: { players: Player[] }) => {
-  const topPlayers = [...players]
-    .filter(player => !player.isHost)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 3);
+  // On reçoit déjà la liste filtrée (sans host)
+  const topPlayers = players.slice(0, 3); // Prendre les 3 premiers déjà triés
 
   return (
     <div className="flex justify-center items-end h-64 mb-8 space-x-4">
-      {/* Second place */}
       {topPlayers[1] && (
         <div className="flex flex-col items-center">
           <div className="w-24 h-32 bg-gray-300 rounded-t-lg flex items-end justify-center pb-2 relative">
@@ -69,7 +77,6 @@ const Podium = ({ players }: { players: Player[] }) => {
         </div>
       )}
 
-      {/* First place */}
       {topPlayers[0] && (
         <div className="flex flex-col items-center">
           <div className="w-28 h-40 bg-yellow-300 rounded-t-lg flex items-end justify-center pb-2 relative">
@@ -82,7 +89,6 @@ const Podium = ({ players }: { players: Player[] }) => {
         </div>
       )}
 
-      {/* Third place */}
       {topPlayers[2] && (
         <div className="flex flex-col items-center">
           <div className="w-20 h-24 bg-amber-300 rounded-t-lg flex items-end justify-center pb-2 relative">
@@ -98,7 +104,9 @@ const Podium = ({ players }: { players: Player[] }) => {
   );
 };
 
-const PlayerMedal = ({ player, position }: { player: Player; position: number }) => {
+const PlayerMedal = ({ player, position }: { player: Player | null; position: number }) => {
+  if (!player) return null;
+
   const medalColor = position === 1 ? 'bg-yellow-500' :
     position === 2 ? 'bg-gray-500' :
       position === 3 ? 'bg-amber-500' : 'bg-[#E71722]';
@@ -121,7 +129,6 @@ const Quiz: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { width, height } = useWindowSize();
-
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isHost, setIsHost] = useState(user !== null);
   const [gameState, setGameState] = useState<'waiting' | 'playing' | 'finished'>('waiting');
@@ -156,7 +163,9 @@ const Quiz: React.FC = () => {
 
   // Fonction pour obtenir uniquement les joueurs (sans le host)
   const getRegularPlayers = useMemo(() => {
-    return players.filter(player => !player.isHost);
+    return players
+      .filter(player => !player.isHost)
+      .sort((a, b) => b.score - a.score);
   }, [players]);
 
   useEffect(() => {
@@ -246,10 +255,21 @@ const Quiz: React.FC = () => {
       }
     });
 
-    newSocket.on('update_scores', (data) => setPlayers(data.players));
+    newSocket.on('update_scores', (data) => {
+      const playersWithHostFlag = data.players.map((player: Player) => ({
+        ...player,
+        isHost: player.id === newSocket.id && user !== null
+      }));
+      setPlayers(playersWithHostFlag);
+    });
+
     newSocket.on('game_over', (data) => {
+      const playersWithHostFlag = data.players.map((player: Player) => ({
+        ...player,
+        isHost: player.id === newSocket.id && user !== null
+      }));
       setGameState('finished');
-      setPlayers(data.players);
+      setPlayers(playersWithHostFlag);
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 8000);
       setShowScores(false);
@@ -468,9 +488,21 @@ const Quiz: React.FC = () => {
             </div>
           </div>
 
+
+
           {/* Question */}
           <div className="flex-1 flex flex-col items-center justify-center p-8">
             <div className="w-full max-w-4xl mb-8">
+              {/* Afficher l'image si elle existe */}
+              {currentQuestion?.image?.url && (
+                <div className="mb-6 flex justify-center">
+                  <img
+                    src={currentQuestion.image.url}
+                    alt="Question illustration"
+                    className="max-h-64 rounded-lg object-contain"
+                  />
+                </div>
+              )}
               <div className={`bg-gray-100 text-gray-800 p-6 rounded-lg shadow-lg`}>
                 <h2 className="text-3xl font-bold text-center">
                   {currentQuestion?.question}
@@ -581,8 +613,7 @@ const Quiz: React.FC = () => {
           <div className="bg-white p-4 overflow-x-auto">
             <div className="flex space-x-4 min-w-max">
               {getRegularPlayers
-                .sort((a, b) => b.score - a.score)
-                .slice(0, 3)
+                .slice(0, 3) // Prendre les 3 premiers déjà triés
                 .map((player, index) => (
                   <div
                     key={player.id}
@@ -696,7 +727,7 @@ const Quiz: React.FC = () => {
           <div className="flex justify-center">
             <div className="bg-gray-100 rounded-lg p-3 flex items-center min-w-[200px] justify-center">
               <div className="w-8 h-8 rounded-full bg-[#E71722] text-white flex items-center justify-center mr-3">
-                {getRegularPlayers.sort((a, b) => b.score - a.score).findIndex(p => p.id === socket?.id) + 1}
+                {getRegularPlayers.findIndex(p => p.id === socket?.id) + 1}
               </div>
               <span className="font-bold">{username}</span>
               <span className="ml-4 text-[#E71722] font-bold text-xl">
@@ -733,7 +764,7 @@ const Quiz: React.FC = () => {
           <>
             {!showScores ? (
               <>
-                <Podium players={players} />
+                <Podium players={getRegularPlayers} />
                 <div className="flex space-x-4 mt-8 justify-center">
                   <button
                     onClick={() => setShowScores(true)}
@@ -746,11 +777,9 @@ const Quiz: React.FC = () => {
             ) : (
               <>
                 <div className="space-y-3 mb-8">
-                  {getRegularPlayers
-                    .sort((a, b) => b.score - a.score)
-                    .map((player, index) => (
-                      <PlayerItem key={player.id} player={player} index={index} />
-                    ))}
+                  {getRegularPlayers.map((player, index) => (
+                    <PlayerItem key={player.id} player={player} index={index} />
+                  ))}
                 </div>
                 <div className="flex space-x-4 mt-8 justify-center">
                   <button
@@ -767,8 +796,8 @@ const Quiz: React.FC = () => {
           // Vue joueur - médaille avec classement
           <div className="flex flex-col items-center justify-center py-8">
             <PlayerMedal
-              player={players.find(p => p.id === socket?.id)!}
-              position={getRegularPlayers.sort((a, b) => b.score - a.score).findIndex(p => p.id === socket?.id) + 1}
+              player={getRegularPlayers.find(p => p.id === socket?.id) || null}
+              position={getRegularPlayers.findIndex(p => p.id === socket?.id) + 1}
             />
           </div>
         )}

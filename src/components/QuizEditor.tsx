@@ -2,7 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import { Plus, Trash, Save, ArrowLeft, Clock, Award } from 'lucide-react';
+import { Plus, Trash, Save, ArrowLeft, Clock, Award, Image, X } from 'lucide-react';
+
+interface QuestionImage {
+  source: 'unsplash' | 'upload';
+  urls?: { regular: string; thumb: string };
+  user?: any;
+  path?: string;
+  id?: string;
+}
 
 interface QuestionForm {
   id?: number;
@@ -15,6 +23,7 @@ interface QuestionForm {
   time_limit: number;
   points: number;
   type: 'qcm' | 'true_false' | 'open_question';
+  image?: QuestionImage | null;
 }
 
 interface Quiz {
@@ -35,6 +44,7 @@ const emptyQuestion: QuestionForm = {
   time_limit: 15,
   points: 10,
   type: 'qcm',
+  image: null,
 };
 
 const QuizEditor: React.FC = () => {
@@ -49,6 +59,8 @@ const QuizEditor: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [searchImage, setSearchImage] = useState('');
+  const [imageResults, setImageResults] = useState<any[]>([]);
 
   useEffect(() => {
     fetchQuiz();
@@ -69,9 +81,15 @@ const QuizEditor: React.FC = () => {
       setQuestions(
         quiz.questions.length > 0
           ? quiz.questions.map((q) => ({
-              ...q,
-              type: q.type,
-            }))
+            ...q,
+            type: q.type,
+            image: q.image ? {
+              source: q.image.source || 'upload',
+              urls: q.image.urls,
+              path: q.image.path,
+              id: q.image.id
+            } : null
+          }))
           : [{ ...emptyQuestion }]
       );
       setInitialLoading(false);
@@ -100,10 +118,10 @@ const QuizEditor: React.FC = () => {
     }
   };
 
-  const updateQuestion = (field: keyof QuestionForm, value: string | number) => {
+  const updateQuestion = (field: keyof QuestionForm, value: any) => {
     const updatedQuestions = [...questions];
     const currentQ = updatedQuestions[currentQuestion];
-  
+
     if (field === 'type') {
       if (value === 'true_false') {
         updatedQuestions[currentQuestion] = {
@@ -136,34 +154,70 @@ const QuizEditor: React.FC = () => {
           correct_answer: ''
         };
       }
+    } else if (field === 'image' && value === null) {
+      // Supprimer l'image
+      updatedQuestions[currentQuestion] = {
+        ...currentQ,
+        image: null
+      };
     } else {
       updatedQuestions[currentQuestion] = {
         ...currentQ,
         [field]: value
       };
     }
-  
+
     setQuestions(updatedQuestions);
+  };
+
+  const searchUnsplash = async () => {
+    if (!searchImage.trim()) return;
+    try {
+      const res = await axios.get('http://localhost:5000/api/unsplash/search', {
+        params: { query: searchImage }
+      });
+      setImageResults(res.data.images);
+    } catch (err) {
+      console.error('Erreur Unsplash', err);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const res = await axios.post('http://localhost:5000/api/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      updateQuestion('image', {
+        source: 'upload',
+        path: res.data.url
+      });
+    } catch (err) {
+      console.error('Erreur upload image', err);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-  
+
     if (!title.trim()) {
       setError('Quiz title is required');
       return;
     }
-  
+
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
-  
+
       if (!q.question.trim()) {
         setError(`Question ${i + 1} is incomplete (missing question text)`);
         setCurrentQuestion(i);
         return;
       }
-  
+
       if (q.type === 'qcm') {
         if (!q.option_a?.trim() || !q.option_b?.trim() || !q.option_c?.trim() || !q.option_d?.trim()) {
           setError(`Question ${i + 1} is incomplete (all options must be filled for QCM)`);
@@ -183,14 +237,16 @@ const QuizEditor: React.FC = () => {
         }
       }
     }
-  
+
     setLoading(true);
-  
+
     try {
-      await axios.put(`http://localhost:5000/api/quizzes/${quizId}`, {
-        title,
-        description,
-        questions: questions.map(q => ({
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('description', description);
+      formData.append('questions', JSON.stringify(
+        questions.map(q => ({
+          id: q.id,
           question: q.question,
           type: q.type,
           time_limit: q.time_limit,
@@ -206,10 +262,36 @@ const QuizEditor: React.FC = () => {
             option_a: 'Vrai',
             option_b: 'Faux',
             correct_answer: q.correct_answer
-          })
+          }),
+          image: q.image
+        }))
+      ));
+
+      await axios.put(`http://localhost:5000/api/quizzes/${quizId}`, {
+        title,
+        description,
+        questions: questions.map(q => ({
+          id: q.id,
+          question: q.question,
+          type: q.type,
+          time_limit: q.time_limit,
+          points: q.points,
+          ...(q.type === 'qcm' && {
+            option_a: q.option_a,
+            option_b: q.option_b,
+            option_c: q.option_c,
+            option_d: q.option_d,
+            correct_answer: q.correct_answer
+          }),
+          ...(q.type === 'true_false' && {
+            option_a: 'Vrai',
+            option_b: 'Faux',
+            correct_answer: q.correct_answer
+          }),
+          image: q.image
         })),
       });
-  
+
       navigate('/quizzes');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to update quiz');
@@ -298,11 +380,10 @@ const QuizEditor: React.FC = () => {
                 key={index}
                 type="button"
                 onClick={() => setCurrentQuestion(index)}
-                className={`flex items-center justify-center min-w-[40px] h-10 mx-1 rounded-full transition-colors ${
-                  currentQuestion === index
-                    ? 'bg-[#E71722] text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
+                className={`flex items-center justify-center min-w-[40px] h-10 mx-1 rounded-full transition-colors ${currentQuestion === index
+                  ? 'bg-[#E71722] text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
               >
                 {index + 1}
               </button>
@@ -320,6 +401,78 @@ const QuizEditor: React.FC = () => {
               >
                 <Trash size={18} />
               </button>
+            </div>
+
+            {/* Nouvelle section pour l'image */}
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-bold mb-2">Question Image</label>
+
+              {questions[currentQuestion].image ? (
+                <div className="mb-2">
+                  <img
+                    src={
+                      questions[currentQuestion].image?.source === 'unsplash'
+                        ? questions[currentQuestion].image?.urls?.thumb
+                        : questions[currentQuestion].image?.path
+                    }
+                    alt="Selected"
+                    className="rounded w-32 h-20 object-cover mb-2"
+                  />
+                  <button
+                    type="button"
+                    className="text-sm text-red-500 underline mb-2"
+                    onClick={() => updateQuestion('image', null)}
+                  >
+                    Remove image
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex mb-2">
+                    <input
+                      type="text"
+                      value={searchImage}
+                      onChange={(e) => setSearchImage(e.target.value)}
+                      className="border px-2 py-1 mr-2 rounded w-full"
+                      placeholder="Search Unsplash (e.g. nature, city...)"
+                    />
+                    <button
+                      type="button"
+                      onClick={searchUnsplash}
+                      className="bg-blue-500 text-white px-3 py-1 rounded"
+                    >
+                      Search
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                    {imageResults.map((img) => (
+                      <img
+                        key={img.id}
+                        src={img.urls.thumb}
+                        alt="Unsplash"
+                        className="rounded cursor-pointer hover:scale-105 transition"
+                        onClick={() => {
+                          updateQuestion('image', {
+                            ...img,
+                            source: 'unsplash'
+                          });
+                          setImageResults([]);
+                          setSearchImage('');
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <div className="mt-2">
+                    <label className="block text-sm text-gray-600 mb-1">or upload from your device</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="block w-full text-sm text-gray-600"
+                    />
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="mb-4">
@@ -356,90 +509,88 @@ const QuizEditor: React.FC = () => {
             </div>
 
             {questions[currentQuestion].type !== 'open_question' && (
-            <>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Option A
-                  </label>
-                  <input
-                    type="text"
-                    value={
-                      questions[currentQuestion].type === 'true_false' 
-                        ? 'Vrai' 
-                        : questions[currentQuestion].option_a || ''
-                    }
-                    onChange={(e) => {
-                      if (questions[currentQuestion].type !== 'true_false') {
-                        updateQuestion('option_a', e.target.value)
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Option A
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        questions[currentQuestion].type === 'true_false'
+                          ? 'Vrai'
+                          : questions[currentQuestion].option_a || ''
                       }
-                    }}
-                    className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline ${
-                      questions[currentQuestion].type === 'true_false' ? 'bg-gray-100' : ''
-                    }`}
-                    placeholder="Option A"
-                    required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
-                    disabled={questions[currentQuestion].type === 'true_false'}
-                    readOnly={questions[currentQuestion].type === 'true_false'}
-                  />
-                </div>
-                <div>
-                  <label className="block text-gray-700 text-sm font-bold mb-2">
-                    Option B
-                  </label>
-                  <input
-                    type="text"
-                    value={
-                      questions[currentQuestion].type === 'true_false' 
-                        ? 'Faux' 
-                        : questions[currentQuestion].option_b || ''
-                    }
-                    onChange={(e) => {
-                      if (questions[currentQuestion].type !== 'true_false') {
-                        updateQuestion('option_b', e.target.value)
+                      onChange={(e) => {
+                        if (questions[currentQuestion].type !== 'true_false') {
+                          updateQuestion('option_a', e.target.value)
+                        }
+                      }}
+                      className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline ${questions[currentQuestion].type === 'true_false' ? 'bg-gray-100' : ''
+                        }`}
+                      placeholder="Option A"
+                      required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
+                      disabled={questions[currentQuestion].type === 'true_false'}
+                      readOnly={questions[currentQuestion].type === 'true_false'}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-700 text-sm font-bold mb-2">
+                      Option B
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        questions[currentQuestion].type === 'true_false'
+                          ? 'Faux'
+                          : questions[currentQuestion].option_b || ''
                       }
-                    }}
-                    className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline ${
-                      questions[currentQuestion].type === 'true_false' ? 'bg-gray-100' : ''
-                    }`}
-                    placeholder="Option B"
-                    required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
-                    disabled={questions[currentQuestion].type === 'true_false'}
-                    readOnly={questions[currentQuestion].type === 'true_false'}
-                  />
-                </div>
+                      onChange={(e) => {
+                        if (questions[currentQuestion].type !== 'true_false') {
+                          updateQuestion('option_b', e.target.value)
+                        }
+                      }}
+                      className={`shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline ${questions[currentQuestion].type === 'true_false' ? 'bg-gray-100' : ''
+                        }`}
+                      placeholder="Option B"
+                      required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
+                      disabled={questions[currentQuestion].type === 'true_false'}
+                      readOnly={questions[currentQuestion].type === 'true_false'}
+                    />
+                  </div>
 
-                {questions[currentQuestion].type === 'qcm' && (
-                  <>
-                    <div>
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Option C
-                      </label>
-                      <input
-                        type="text"
-                        value={questions[currentQuestion].option_c || ''}
-                        onChange={(e) => updateQuestion('option_c', e.target.value)}
-                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        placeholder="Option C"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-gray-700 text-sm font-bold mb-2">
-                        Option D
-                      </label>
-                      <input
-                        type="text"
-                        value={questions[currentQuestion].option_d || ''}
-                        onChange={(e) => updateQuestion('option_d', e.target.value)}
-                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                        placeholder="Option D"
-                        required
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
+                  {questions[currentQuestion].type === 'qcm' && (
+                    <>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2">
+                          Option C
+                        </label>
+                        <input
+                          type="text"
+                          value={questions[currentQuestion].option_c || ''}
+                          onChange={(e) => updateQuestion('option_c', e.target.value)}
+                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          placeholder="Option C"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-gray-700 text-sm font-bold mb-2">
+                          Option D
+                        </label>
+                        <input
+                          type="text"
+                          value={questions[currentQuestion].option_d || ''}
+                          onChange={(e) => updateQuestion('option_d', e.target.value)}
+                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          placeholder="Option D"
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 <div className="mb-4">
                   <label className="block text-gray-700 text-sm font-bold mb-2">
