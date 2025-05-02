@@ -11,6 +11,7 @@
     "server": "python server/app.py"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.2",
     "axios": "^1.6.7",
     "lucide-react": "^0.344.0",
     "qrcode.react": "^3.1.0",
