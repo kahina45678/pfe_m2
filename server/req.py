@@ -11,7 +11,50 @@ BLUE = "\033[94m"
 GREY = "\033[90m"
 
 # Chemin vers la base SQLite
+import sqlite3
+from rich.console import Console
+from rich.table import Table
+
 DB_PATH = "/home/kahina-ameouni/Téléchargements/pfe_m2-main(1)/pfe_m2-main/server/quiz.db"
+
+# Connexion
+conn = sqlite3.connect(DB_PATH)
+cursor = conn.cursor()
+
+# Exécution de la requête
+cursor.execute('''
+SELECT quiz_id, question, option_a, option_b, option_c, option_d, correct_answer, image_url
+FROM questions
+ORDER BY quiz_id
+''')
+rows = cursor.fetchall()
+
+# Affichage esthétique avec rich
+console = Console()
+last_quiz_id = None
+
+for row in rows:
+    quiz_id, question, a, b, c, d, answer, image_url = row
+    if quiz_id != last_quiz_id:
+        if last_quiz_id is not None:
+            console.print()  # saut de ligne
+        console.rule(f"[bold blue]Quiz ID: {quiz_id}")
+        last_quiz_id = quiz_id
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("Question", width=50)
+    table.add_column("A")
+    table.add_column("B")
+    table.add_column("C")
+    table.add_column("D")
+    table.add_column("✓")
+    table.add_column("Image URL", style="cyan", overflow="fold")
+
+    table.add_row(question, a or "", b or "", c or "", d or "", answer or "", image_url or "-")
+    console.print(table)
+
+conn.close()
+
 
 # Connexion
 conn = sqlite3.connect(DB_PATH)

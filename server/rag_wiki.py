@@ -48,7 +48,6 @@ on the topic '{subject}' with {difficulty} difficulty.
 
 Each question must follow this format:
 Q: [Open-ended question]
-A: [Short, informative answer]
 
 Context:
 {context}

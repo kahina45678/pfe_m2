@@ -100,7 +100,7 @@ def api_generate_quiz():
                     "type": "qcm"
                 })
 
-        elif qtype == "TrueFalse":
+        elif qtype == "true_false":
             pattern = re.compile(
                 r"\d+\)\s*(.+?)\nAnswer:\s*(True|False)",
                 re.IGNORECASE
@@ -125,16 +125,12 @@ def api_generate_quiz():
             print("🔍 Regex Open utilisée:", pattern.pattern)
 
             for match in pattern.finditer(quiz):
-                print(f"📌 Question ouverte: {match.group(1).strip()} ✅ Réponse: {match.group(2).strip()}")
+                print(f"📌 Question ouverte: {match.group(1).strip()}")
                 questions.append({
                     "question": match.group(1).strip(),
                     "propositions": [],
-                    "correct_answer": match.group(2).strip(),
                     "image": None,
                     "type": "open_question"
-
-                    
-
                 })
 
         else:
@@ -159,10 +155,18 @@ def api_generate_quiz():
                 print(f"🖼️ Recherche d'images avec : {mot_cle}")
                 images = search_and_display_images(mot_cle)
                 print(f"📸 Images trouvées : {images}")
+                img_url = filtrer(images) if images else None
+                if img_url:
+                    qst["image"] = {
+                        "url": img_url,
+                        "source": "unsplash"
+                    }
+                else:
+                    qst["image"] = None
 
-                img = filtrer(images)
-                print(f"✅ Image sélectionnée : {img}")
-                qst["image"] = img
+
+                
+                
             except Exception as e:
                 logging.exception(f"⚠️ Erreur lors du traitement image/mot-clé pour : {txt}")
                 qst["image"] = None
@@ -192,6 +196,17 @@ def api_generate_quiz():
                 option_c = propositions[2] if len(propositions) > 2 else None
                 option_d = propositions[3] if len(propositions) > 3 else None
 
+                
+                if qst["type"] == "qcm":
+                    correct_letter = qst["correct_answer"]
+                    letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
+                    idx = letter_to_index.get(correct_letter.upper(), None)
+                    correct_text = propositions[idx] if idx is not None and idx < len(propositions) else correct_letter
+                elif qst["type"] == "true_false":
+                    correct_text = "Vrai" if qst["correct_answer"].lower() == "true" else "Faux"
+                else:
+                    correct_text = qst["correct_answer"]
+
                 print(f"📝 Insertion question: {qst['question']}")
 
                 cursor.execute('''
@@ -206,10 +221,11 @@ def api_generate_quiz():
                     option_b,
                     option_c,
                     option_d,
-                    qst["correct_answer"],
-                    qtype,
-                    qst["image"] if qst["image"] else None,
-                    "unsplash" if qst["image"] else "none"
+                    correct_text,
+                    qst["type"],
+                    qst["image"]["url"] if qst["image"] else None,
+                    qst["image"]["source"] if qst["image"] else "none"
+
                 ))
 
             conn.commit()
@@ -225,6 +241,8 @@ def api_generate_quiz():
     except Exception as e:
         logging.exception("❌ Erreur inattendue pendant la génération du quiz")
         return jsonify({"error": str(e)}), 500
+
+
 
 
             
