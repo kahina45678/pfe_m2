@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
 import { LogOut, Users, Trophy, Play, Plus, BookOpen } from 'lucide-react';
 import { io } from "socket.io-client";
+import AIQuizModal from '../components/AIQuizModal';
+
 
 interface Quiz {
   id: number;
@@ -20,7 +22,10 @@ const Home: React.FC = () => {
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [selectedQuiz, setSelectedQuiz] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
+
   
+
   useEffect(() => {
     if (user) {
       fetchQuizzes();
@@ -103,32 +108,32 @@ const Home: React.FC = () => {
     <div className="max-w-4xl mx-auto">
       <div className="bg-white rounded-xl shadow-md overflow-hidden p-8 mb-8">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-3xl font-bold text-[#E71722]">Welcome, {user?.username}!</h2> {/* Nouvelle couleur */}
+          <h2 className="text-3xl font-bold text-[#E71722]">Welcome, {user?.username}!</h2>
           <button
             onClick={handleLogout}
-            className="flex items-center bg-[#E71722] hover:bg-[#C1121F] text-white px-4 py-2 rounded transition-colors" 
+            className="flex items-center bg-[#E71722] hover:bg-[#C1121F] text-white px-4 py-2 rounded transition-colors"
           >
             <LogOut size={18} className="mr-2" />
             Logout
           </button>
         </div>
-        
+  
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
             <span className="block sm:inline">{error}</span>
           </div>
         )}
-        
+  
         <div className="grid md:grid-cols-2 gap-8">
           <div className="bg-red-50 p-6 rounded-lg">
-            <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center"> {/* Nouvelle couleur */}
+            <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center">
               <Play size={24} className="mr-2" />
               Host a Quiz
             </h3>
             <p className="text-gray-600 mb-4">
               Select one of your quizzes and create a room for others to join.
             </p>
-            
+  
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2">
                 Select Quiz
@@ -144,16 +149,16 @@ const Home: React.FC = () => {
                 ))}
               </select>
             </div>
-            
+  
             <div className="flex space-x-2">
               <button
                 onClick={handleCreateRoom}
                 disabled={loading || !selectedQuiz}
-                className="flex-1 bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-red-300 transition-colors" 
+                className="flex-1 bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-red-300 transition-colors"
               >
                 {loading ? 'Creating...' : 'Create Room'}
               </button>
-              
+  
               <button
                 onClick={() => navigate('/quizzes/create')}
                 className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
@@ -162,10 +167,42 @@ const Home: React.FC = () => {
               </button>
             </div>
           </div>
-          
+  
+          <div className="bg-white rounded-xl shadow-md overflow-hidden p-8">
+            <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center">
+              <Plus size={24} className="mr-2" />
+              Create New Quiz
+            </h3>
+            <p className="text-gray-600 mb-4">
+              Choose how you want to create your quiz
+            </p>
+  
+            <div className="space-y-3">
+              <button
+                onClick={() => navigate('/quizzes/create/manual')}
+                className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full"
+              >
+                Create Manually
+              </button>
+  
+              <button
+                onClick={() => setShowAIModal(true)}
+                className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full"
+              >
+                Create with AI
+              </button>
+  
+              <button
+                onClick={() => navigate('/quizzes/create/document')}
+                className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full"
+              >
+                Create from Document
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-      
+  
       <div className="grid md:grid-cols-2 gap-8">
         <div className="bg-white rounded-xl shadow-md overflow-hidden p-8">
           <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center">
@@ -177,12 +214,12 @@ const Home: React.FC = () => {
           </p>
           <button
             onClick={() => navigate('/quizzes')}
-            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full" 
+            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full"
           >
             View My Quizzes
           </button>
         </div>
-        
+  
         <div className="bg-white rounded-xl shadow-md overflow-hidden p-8">
           <h3 className="text-xl font-semibold text-[#E71722] mb-4 flex items-center">
             <Trophy size={24} className="mr-2" />
@@ -193,14 +230,23 @@ const Home: React.FC = () => {
           </p>
           <button
             onClick={() => navigate('/leaderboard')}
-            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full" 
+            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors w-full"
           >
             View Leaderboard
           </button>
         </div>
       </div>
+  
+      {user && (
+        <AIQuizModal
+          isOpen={showAIModal}
+          onClose={() => setShowAIModal(false)}
+          userId={user.id}
+        />
+      )}
     </div>
   );
-};
+};  
+
 
 export default Home;

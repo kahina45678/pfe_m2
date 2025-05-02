@@ -1,3 +1,5 @@
+import logging
+import re
 from flask import Flask, request, jsonify, session
 from flask_socketio import SocketIO, emit, join_room, leave_room
 from flask_cors import CORS
@@ -13,27 +15,41 @@ import io
 from dotenv import load_dotenv
 import base64
 from threading import Timer
+from easyocr import Reader  # Attention installe bien easyocr
+from io import BytesIO
+from PIL import Image
 from db import (
     init_db, get_quizzes_by_user, get_quiz_by_id, create_quiz, update_quiz,
     delete_quiz, create_room, get_room_by_code, save_score, get_leaderboard,
     get_db_connection
 )
+from rag_wiki import generate_quiz_from_wikipedia
+from motcle import init_kbert, extract_kw
+from images import search_and_display_images, filtrer
+
+# from rag import generate_quiz,init_rag
 
 # Initialize Flask app
 
 app = Flask(__name__)
 app.secret_key = 'quiz_app_secret_key'  # Change this in production
 CORS(app, supports_credentials=True)
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*")  
 
 load_dotenv()
-
+# init_rag()
 # Configuration Unsplash
-UNSPLASH_KEY = os.environ['UNSPLASH_KEY']
+# UNSPLASH_KEY = os.environ['UNSPLASH_KEY']
+UNSPLASH_KEY='Ee0ofjghUT6ONRqY-Lb5S68AMNrQ5xUjrcNyGF3fZo8'
 UNSPLASH_API = "https://api.unsplash.com"
+
+reader = Reader(['en'], gpu=False)
 
 # Initialize database
 init_db()
+
+
+kb=init_kbert()
 
 # Active quiz rooms
 active_rooms = {}
@@ -41,6 +57,220 @@ user_rooms = {}
 timers = {}  # Pour stocker les timers de chaque room
 
 # Routes
+@app.route('/api/quizzes/ai', methods=['POST'])
+def api_generate_quiz():
+    data = request.json
+    print("📥 Requête reçue:", data)
+
+    subject = data.get("theme", "history")
+    difficulty = data.get("difficulty", "medium")
+    nb_qst = int(data.get("count", 5))
+    qtype = data.get("qtype", "MCQ")
+    
+    try:
+        quiz = generate_quiz_from_wikipedia(subject, difficulty, nb_qst, qtype)
+        print("🧠 Contenu brut généré par le modèle :\n", quiz)
+        questions = []
+
+        # Choix de la regex selon qtype
+        if qtype == "MCQ":
+            pattern = re.compile(r"""(?msx)
+                \s*(\d+)\)\s+
+                (.+?)\n
+                \s*A\)\s+(.+?)\n
+                \s*B\)\s+(.+?)\n
+                \s*C\)\s+(.+?)\n
+                \s*D\)\s+(.+?)\n
+                \s*Answer:\s+([ABCD])\s*
+            """)
+            print("🔍 Regex MCQ utilisée:", pattern.pattern)
+
+            for match in pattern.finditer(quiz):
+                question_text = match.group(2).strip()
+                options = [match.group(i).strip() for i in range(3, 7)]
+                correct = match.group(7).strip()
+                print(f"📌 MCQ détectée: {question_text}")
+                print(f"🔸 Options: {options} | ✅ Réponse: {correct}")
+
+                questions.append({
+                    "question": question_text,
+                    "propositions": options,
+                    "correct_answer": correct,
+                    "image": None,
+                    "type": "qcm"
+                })
+
+        elif qtype == "true_false":
+            pattern = re.compile(
+                r"\d+\)\s*(.+?)\nAnswer:\s*(True|False)",
+                re.IGNORECASE
+            )
+            print("🔍 Regex TrueFalse utilisée:", pattern.pattern)
+
+            for match in pattern.finditer(quiz):
+                print(f"📌 TF détectée: {match.group(1).strip()} ✅ Réponse: {match.group(2).capitalize()}")
+                questions.append({
+                    "question": match.group(1).strip(),
+                    "propositions": ["True", "False"],
+                    "correct_answer": match.group(2).capitalize(),
+                    "image": None,
+                    "type": "true_false"
+                })
+
+        elif qtype == "Open":
+            pattern = re.compile(
+                r"\d+\)\s*(.+?)\nAnswer:\s*(.+)",
+                re.DOTALL
+            )
+            print("🔍 Regex Open utilisée:", pattern.pattern)
+
+            for match in pattern.finditer(quiz):
+                print(f"📌 Question ouverte: {match.group(1).strip()}")
+                questions.append({
+                    "question": match.group(1).strip(),
+                    "propositions": [],
+                    "image": None,
+                    "type": "open_question"
+                })
+
+        else:
+            logging.error(f"❌ Type de question non supporté : {qtype}")
+            return jsonify({"error": f"Unsupported question type: {qtype}"}), 400
+
+        if not questions:
+            logging.error("❌ Aucune question valide trouvée dans le texte généré")
+            return jsonify({"error": "Failed to parse questions from model response"}), 500
+
+        for qst in questions:
+            try:
+                txt = qst['question']
+                print(f"🔎 Extraction mot-clé pour : {txt}")
+                mot_cle = extract_kw(kb, txt)
+                print(f"🧠 Mot-clé extrait : {mot_cle}")
+
+                if not mot_cle:
+                    logging.warning(f"⚠️ Mot-clé vide pour la question : {txt}")
+                    mot_cle = subject  
+
+                print(f"🖼️ Recherche d'images avec : {mot_cle}")
+                images = search_and_display_images(mot_cle)
+                print(f"📸 Images trouvées : {images}")
+                img_url = filtrer(images) if images else None
+                if img_url:
+                    qst["image"] = {
+                        "url": img_url,
+                        "source": "unsplash"
+                    }
+                else:
+                    qst["image"] = None
+
+
+                
+                
+            except Exception as e:
+                logging.exception(f"⚠️ Erreur lors du traitement image/mot-clé pour : {txt}")
+                qst["image"] = None
+
+        # Connexion DB
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            print("✅ Connexion à la base de données établie")
+
+            title = f"Quiz on {subject.capitalize()} ({difficulty.capitalize()})"
+            description = f"Auto-generated quiz about {subject}."
+            user_id = data.get("user_id", 987654321)
+
+            cursor.execute('''
+                INSERT INTO quizzes (title, description, user_id)
+                VALUES (?, ?, ?)
+            ''', (title, description, user_id))
+            
+            quiz_id = cursor.lastrowid
+            print(f"🆔 Quiz inséré avec ID : {quiz_id}")
+
+            for qst in questions:
+                propositions = qst["propositions"]
+                option_a = propositions[0] if len(propositions) > 0 else None
+                option_b = propositions[1] if len(propositions) > 1 else None
+                option_c = propositions[2] if len(propositions) > 2 else None
+                option_d = propositions[3] if len(propositions) > 3 else None
+
+                
+                if qst["type"] == "qcm":
+                    correct_letter = qst["correct_answer"]
+                    letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
+                    idx = letter_to_index.get(correct_letter.upper(), None)
+                    correct_text = propositions[idx] if idx is not None and idx < len(propositions) else correct_letter
+                elif qst["type"] == "true_false":
+                    correct_text = "Vrai" if qst["correct_answer"].lower() == "true" else "Faux"
+                else:
+                    correct_text = qst["correct_answer"]
+
+                print(f"📝 Insertion question: {qst['question']}")
+
+                cursor.execute('''
+                    INSERT INTO questions (
+                        quiz_id, question, option_a, option_b, option_c, option_d,
+                        correct_answer, type, image_url, image_source
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    quiz_id,
+                    qst["question"],
+                    option_a,
+                    option_b,
+                    option_c,
+                    option_d,
+                    correct_text,
+                    qst["type"],
+                    qst["image"]["url"] if qst["image"] else None,
+                    qst["image"]["source"] if qst["image"] else "none"
+
+                ))
+
+            conn.commit()
+            conn.close()
+            print("✅ Quiz et questions enregistrés avec succès")
+
+        except Exception as db_err:
+            logging.exception("❌ Erreur lors de l'enregistrement en base")
+            return jsonify({"error": "Database error"}), 500
+
+        return jsonify({"success": True, "quiz_id": quiz_id}), 201
+
+    except Exception as e:
+        logging.exception("❌ Erreur inattendue pendant la génération du quiz")
+        return jsonify({"error": str(e)}), 500
+
+
+
+
+            
+
+
+def search_unsplash_image(keyword):
+    try:
+        headers = {
+            "Authorization": f"Client-ID {UNSPLASH_KEY}"
+        }
+        params = {
+            "query": keyword,
+            "orientation": "landscape",
+            "per_page": 1
+        }
+        response = requests.get(
+            "https://api.unsplash.com/search/photos",
+            headers=headers,
+            params=params
+        )
+        response.raise_for_status()
+        data = response.json()
+        if data['results']:
+            return data['results'][0]['urls']['regular']
+        return None
+    except Exception as e:
+        logging.warning(f"Couldn't fetch image from Unsplash: {str(e)}")
+        return None
 
 
 @app.route('/api/unsplash/search', methods=['GET'])
