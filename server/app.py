@@ -15,7 +15,7 @@ import io
 from dotenv import load_dotenv
 import base64
 from threading import Timer
-from easyocr import Reader  # Attention installe bien easyocr
+from easyocr import Reader 
 from io import BytesIO
 from PIL import Image
 from db import (
@@ -75,14 +75,24 @@ def api_generate_quiz():
         # Choix de la regex selon qtype
         if qtype == "MCQ":
             pattern = re.compile(r"""(?msx)
-                \s*(\d+)\)\s+
-                (.+?)\n
-                \s*A\)\s+(.+?)\n
-                \s*B\)\s+(.+?)\n
-                \s*C\)\s+(.+?)\n
-                \s*D\)\s+(.+?)\n
-                \s*Answer:\s+([ABCD])\s*
+                \s*(\d+)\)\s+               # numéro de la question
+                (.+?)\n                     # énoncé
+                \s*A\)\s+(.+?)\n            # option A
+                \s*B\)\s+(.+?)\n            # option B
+                \s*C\)\s+(.+?)\n            # option C
+                \s*D\)\s+(.+?)\n            # option D
+                \s*Answer:\s*(?:\(|\[)?([ABCD])(?:\)|\])?\s*   # réponse entre rien, (), ou []
             """)
+
+            # pattern = re.compile(r"""(?msx)
+            #     \s*(\d+)\)\s+
+            #     (.+?)\n
+            #     \s*A\)\s+(.+?)\n
+            #     \s*B\)\s+(.+?)\n
+            #     \s*C\)\s+(.+?)\n
+            #     \s*D\)\s+(.+?)\n
+            #     \s*Answer:\s+([ABCD])\s*
+            # """)
             print("🔍 Regex MCQ utilisée:", pattern.pattern)
 
             for match in pattern.finditer(quiz):

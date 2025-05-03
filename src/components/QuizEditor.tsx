@@ -83,12 +83,21 @@ const QuizEditor: React.FC = () => {
           ? quiz.questions.map((q) => ({
             ...q,
             type: q.type,
-            image: q.image ? {
-              source: q.image.source || 'upload',
-              urls: q.image.urls,
-              path: q.image.path,
-              id: q.image.id
-            } : null
+            image: q.image_url
+                ? {
+                    source: q.image_source || 'upload',
+                    urls: q.image_source === 'unsplash'
+                      ? {
+                          thumb: q.image_url,
+                          regular: q.image_url
+                        }
+                      : undefined,
+                    path: q.image_source !== 'unsplash' ? q.image_url : undefined,
+                    id: q.id.toString()
+                  }
+                : null
+
+            
           }))
           : [{ ...emptyQuestion }]
       );
@@ -410,14 +419,15 @@ const QuizEditor: React.FC = () => {
               {questions[currentQuestion].image ? (
                 <div className="mb-2">
                   <img
-                    src={
-                      questions[currentQuestion].image?.source === 'unsplash'
-                        ? questions[currentQuestion].image?.urls?.thumb
-                        : questions[currentQuestion].image?.path
-                    }
-                    alt="Selected"
-                    className="rounded w-32 h-20 object-cover mb-2"
-                  />
+                      src={
+                        questions[currentQuestion].image?.source === 'unsplash'
+                          ? questions[currentQuestion].image?.urls?.thumb || questions[currentQuestion].image?.path || questions[currentQuestion].image?.url
+                          : questions[currentQuestion].image?.path
+                      }
+                      alt="Selected"
+                      className="rounded w-32 h-20 object-cover mb-2"
+                    />
+
                   <button
                     type="button"
                     className="text-sm text-red-500 underline mb-2"
