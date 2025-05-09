@@ -11,6 +11,8 @@ interface Game {
   created_at: string;
   quiz_title: string;
   player_count: number;
+  host_id: number;
+  user_role: string; // 'host' or 'player'
 }
 
 interface GameDetails {
@@ -19,6 +21,7 @@ interface GameDetails {
     quiz_title: string;
     created_at: string;
     room_code: string;
+    host_id: number;
   };
   players: Array<{
     user_id: number;
@@ -63,10 +66,11 @@ const GameList: React.FC<{ games: Game[]; onSelectGame: (id: number) => void }> 
                 <div>
                   <h3 className="font-semibold text-lg">{game.quiz_title}</h3>
                   <p className="text-sm text-gray-500">Room: {game.room_code}</p>
+                  <p className="text-xs text-gray-400">({game.user_role === 'host' ? 'Hosted' : 'Played'})</p>
                 </div>
                 <div className="text-right">
                   <p className="text-sm">{new Date(game.created_at).toLocaleString()}</p>
-                  <p className="text-sm">{game.player_count} players</p>
+                  <p className="text-sm">{game.player_count - 1} players</p>
                 </div>
               </div>
             </li>
@@ -177,6 +181,10 @@ const GameDetailsView: React.FC<{ details: GameDetails; onBack: () => void }> = 
   const qcmQuestions = details.questions.filter(q => q.type !== 'open_question');
   const openQuestions = details.questions.filter(q => q.type === 'open_question');
 
+  // Filtrer les joueurs pour exclure l'hôte
+  const players = details.players.filter(player => player.user_id !== details.game.host_id)
+    .sort((a, b) => b.score - a.score);
+
   return (
     <div>
       <button 
@@ -191,14 +199,20 @@ const GameDetailsView: React.FC<{ details: GameDetails; onBack: () => void }> = 
         <div className="flex flex-wrap gap-4 text-sm text-gray-600 mb-4">
           <p>Room: {details.game.room_code}</p>
           <p>Date: {new Date(details.game.created_at).toLocaleString()}</p>
+          <p>Players: {players.length}</p>
         </div>
         
-        <h3 className="font-semibold text-lg mb-2">Players</h3>
+        <h3 className="font-semibold text-lg mb-2">Players Ranking</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {details.players.map((player, index) => (
+          {players.map((player, index) => (
             <div key={player.user_id} className="bg-gray-50 p-4 rounded-lg">
               <div className="flex items-center mb-2">
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 ${index === 0 ? 'bg-yellow-500 text-white text-xs' : 'bg-gray-200 text-gray-700 text-xs'}`}>
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 ${
+                  index === 0 ? 'bg-yellow-500 text-white text-xs' : 
+                  index === 1 ? 'bg-gray-500 text-white text-xs' :
+                  index === 2 ? 'bg-amber-500 text-white text-xs' :
+                  'bg-gray-200 text-gray-700 text-xs'
+                }`}>
                   {index + 1}
                 </div>
                 <p className="font-medium">{player.username}</p>
@@ -221,7 +235,10 @@ const GameDetailsView: React.FC<{ details: GameDetails; onBack: () => void }> = 
       <div>
         <h4 className="font-semibold text-lg mb-2">Open Questions</h4>
         {openQuestions.map(question => {
-          const answers = details.open_answers.filter(a => a.question_id === question.id);
+          const answers = details.open_answers
+            .filter(a => a.question_id === question.id)
+            .filter(a => a.user_id !== details.game.host_id); // Exclure les réponses de l'hôte
+          
           return (
             <OpenQuestionStats 
               key={question.id} 
@@ -280,12 +297,48 @@ const ReportPage: React.FC = () => {
     setGameDetails(null);
   };
 
+  const handleDeleteHistory = async () => {
+    if (!user || !window.confirm("Are you sure you want to delete all your game history? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await axios.delete(`http://localhost:5000/api/delete_game_history?user_id=${user.id}`);
+      setGames([]);
+      if (gameId) {
+        navigate('/reports');
+        setGameDetails(null);
+      }
+      alert("Game history deleted successfully");
+    } catch (error) {
+      console.error("Error deleting game history:", error);
+      alert("Failed to delete game history");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto p-6">
       {gameDetails ? (
         <GameDetailsView details={gameDetails} onBack={handleBackToList} />
       ) : (
-        <GameList games={games} onSelectGame={handleSelectGame} />
+        <div className="space-y-4">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-[#E71722]">Game Reports</h1>
+            {games.length > 0 && (
+              <button
+                onClick={handleDeleteHistory}
+                disabled={loading}
+                className="bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+              >
+                {loading ? 'Deleting...' : 'Delete All History'}
+              </button>
+            )}
+          </div>
+          <GameList games={games} onSelectGame={handleSelectGame} />
+        </div>
       )}
     </div>
   );

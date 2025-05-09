@@ -36,7 +36,13 @@ interface Question {
   };
 }
 
-const shapes = ['▲', '●', '■', '◆'];
+interface SocketPlayer {
+  id: string;
+  username: string;
+  score: number;
+}
+
+const shapes = ['♠', '♥', '♦', '♣'];  
 
 const PlayerItem = React.memo(({ player, index }: { player: Player; index: number }) => (
   <div className={`p-3 rounded-lg flex items-center justify-between ${index === 0 ? 'bg-yellow-100 border border-yellow-300' :
@@ -261,13 +267,17 @@ const Quiz: React.FC = () => {
       setPlayers(playersWithHostFlag);
     });
 
-    newSocket.on('game_over', (data) => {
+    newSocket.on('game_over', (data: { players: SocketPlayer[] }) => {
       const playersWithHostFlag = data.players.map((player: Player) => ({
         ...player,
         isHost: player.id === newSocket.id && user !== null
       }));
+      
+      // Filtrer pour exclure l'hôte
+      const regularPlayers = playersWithHostFlag.filter(player => !player.isHost);
+      
       setGameState('finished');
-      setPlayers(playersWithHostFlag);
+      setPlayers(regularPlayers);  // Utiliser la liste filtrée
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 8000);
       setShowScores(false);

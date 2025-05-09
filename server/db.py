@@ -420,3 +420,17 @@ def get_leaderboard(limit=10):
 
     conn.close()
     return [dict(entry) for entry in leaderboard]
+
+def get_game_players(game_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT DISTINCT u.id as user_id, u.username, gp.score
+        FROM game_players gp
+        JOIN users u ON gp.user_id = u.id
+        WHERE gp.game_id = ?
+        ORDER BY gp.score DESC
+    ''', (game_id,))
+    players = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return players

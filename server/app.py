@@ -520,17 +520,15 @@ def get_game_history():
     cursor = conn.cursor()
 
     try:
-        # Récupérer l'historique des parties où l'utilisateur est soit hôte soit participant
+        # Récupérer l'historique des parties sans doublons
         cursor.execute('''
-            SELECT g.id, g.quiz_id, g.room_code, g.created_at, q.title as quiz_title,
+            SELECT DISTINCT g.id, g.quiz_id, g.room_code, g.created_at, q.title as quiz_title,
                    (SELECT COUNT(*) FROM game_players WHERE game_id = g.id) as player_count,
                    CASE WHEN g.host_id = ? THEN 'host' ELSE 'player' END as user_role
             FROM games g
             JOIN quizzes q ON g.quiz_id = q.id
-            WHERE g.host_id = ? OR EXISTS (
-                SELECT 1 FROM game_players gp 
-                WHERE gp.game_id = g.id AND gp.user_id = ?
-            )
+            LEFT JOIN game_players gp ON g.id = gp.game_id
+            WHERE g.host_id = ? OR gp.user_id = ?
             ORDER BY g.created_at DESC
         ''', (user_id, user_id, user_id))
         
@@ -550,7 +548,7 @@ def get_game_details(game_id):
     try:
         # Détails de base de la partie
         cursor.execute('''
-            SELECT g.*, q.title as quiz_title, u.username as host_name
+            SELECT g.*, q.title as quiz_title, u.username as host_name, u.id as host_id
             FROM games g
             JOIN quizzes q ON g.quiz_id = q.id
             JOIN users u ON g.host_id = u.id
@@ -561,52 +559,111 @@ def get_game_details(game_id):
             return jsonify({"error": "Game not found"}), 404
         game = dict(game)
 
-        # Joueurs et leurs scores
+        # Questions du quiz (sans doublons)
         cursor.execute('''
-            SELECT u.username, gp.score
-            FROM game_players gp
-            JOIN users u ON gp.user_id = u.id
-            WHERE gp.game_id = ?
-            ORDER BY gp.score DESC
-        ''', (game_id,))
-        players = [dict(row) for row in cursor.fetchall()]
-
-        # Questions du quiz
-        cursor.execute('''
-            SELECT q.id, q.question, q.type, q.correct_answer
+            SELECT DISTINCT q.id, q.question, q.type, q.correct_answer
             FROM questions q
             WHERE q.quiz_id = ?
         ''', (game['quiz_id'],))
         questions = [dict(row) for row in cursor.fetchall()]
 
+        # Joueurs (sans l'hôte)
+        cursor.execute('''
+            SELECT DISTINCT u.id as user_id, u.username, gp.score
+            FROM game_players gp
+            JOIN users u ON gp.user_id = u.id
+            WHERE gp.game_id = ? AND u.id != ?
+            ORDER BY gp.score DESC
+        ''', (game_id, game['host_id']))
+        players = [dict(row) for row in cursor.fetchall()]
+
         # Statistiques des réponses
         for question in questions:
             cursor.execute('''
-                SELECT COUNT(*) as total_answers,
-                       SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END) as correct_count
+                SELECT 
+                    COUNT(DISTINCT a.user_id) as total_answers,
+                    SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END) as correct_count,
+                    SUM(CASE WHEN NOT a.is_correct THEN 1 ELSE 0 END) as incorrect_count
                 FROM answers a
-                WHERE a.game_id = ? AND a.question_id = ?
-            ''', (game_id, question['id']))
+                WHERE a.game_id = ? AND a.question_id = ? AND a.user_id != ?
+            ''', (game_id, question['id'], game['host_id']))
             stats = cursor.fetchone()
-            question.update(dict(stats))
+            question.update({
+                'correct_count': stats['correct_count'] or 0,
+                'incorrect_count': stats['incorrect_count'] or 0,
+                'total_answers': stats['total_answers'] or 0
+            })
 
-        # Réponses ouvertes
+        # Réponses ouvertes (sans l'hôte)
         cursor.execute('''
-            SELECT a.question_id, u.username, a.answer_text, a.is_correct
+            SELECT DISTINCT a.question_id, u.id as user_id, u.username, a.answer_text, a.is_correct
             FROM answers a
             JOIN users u ON a.user_id = u.id
             JOIN questions q ON a.question_id = q.id
-            WHERE a.game_id = ? AND q.type = 'open_question'
-        ''', (game_id,))
+            WHERE a.game_id = ? AND q.type = 'open_question' AND a.user_id != ?
+        ''', (game_id, game['host_id']))
         open_answers = [dict(row) for row in cursor.fetchall()]
 
         return jsonify({
-            "game": game,
+            "game": {
+                "id": game['id'],
+                "quiz_title": game['quiz_title'],
+                "created_at": game['created_at'],
+                "room_code": game['room_code'],
+                "host_id": game['host_id']
+            },
             "players": players,
             "questions": questions,
             "open_answers": open_answers
         })
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
+
+@app.route('/api/delete_game_history', methods=['DELETE'])
+def delete_game_history():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({"error": "User ID is required"}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    try:
+        # Supprimer les réponses associées aux parties de l'utilisateur
+        cursor.execute('''
+            DELETE FROM answers 
+            WHERE game_id IN (
+                SELECT g.id FROM games g 
+                WHERE g.host_id = ? OR EXISTS (
+                    SELECT 1 FROM game_players gp 
+                    WHERE gp.game_id = g.id AND gp.user_id = ?
+                )
+            )
+        ''', (user_id, user_id))
+        
+        # Supprimer les joueurs associés aux parties de l'utilisateur
+        cursor.execute('''
+            DELETE FROM game_players 
+            WHERE user_id = ? OR game_id IN (
+                SELECT id FROM games WHERE host_id = ?
+            )
+        ''', (user_id, user_id))
+        
+        # Supprimer les parties de l'utilisateur
+        cursor.execute('''
+            DELETE FROM games 
+            WHERE host_id = ? OR EXISTS (
+                SELECT 1 FROM game_players gp 
+                WHERE gp.game_id = games.id AND gp.user_id = ?
+            )
+        ''', (user_id, user_id))
+        
+        conn.commit()
+        return jsonify({"success": True, "message": "Game history deleted successfully"}), 200
+    except Exception as e:
+        conn.rollback()
         return jsonify({"error": str(e)}), 500
     finally:
         conn.close()
@@ -716,64 +773,64 @@ def handle_create_room(data):
     quiz_id = data.get('quiz_id')
     room_code = data.get('room_code')
 
-    # Vérifier que l'hôte est connecté (exemple simplifié)
+    # Vérifier que l'hôte est connecté
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
     host = cursor.fetchone()
-    conn.close()
-
+    
     if not host:
+        conn.close()
         emit('error', {'message': 'Host not logged in'})
         return
 
-    # Obtenir les détails du quiz
-    quiz = get_quiz_by_id(quiz_id)
-    if not quiz:
-        emit('error', {'message': 'Quiz not found'})
-        return
+    # Vérifier si une partie avec ce room_code existe déjà
+    cursor.execute('SELECT id FROM games WHERE room_code = ?', (room_code,))
+    existing_game = cursor.fetchone()
+    
+    if existing_game:
+        game_id = existing_game['id']
+    else:
+        # Créer l'entrée de jeu seulement si elle n'existe pas déjà
+        cursor.execute('''
+            INSERT INTO games (quiz_id, room_code, host_id)
+            VALUES (?, ?, ?)
+        ''', (quiz_id, room_code, host['id']))
+        game_id = cursor.lastrowid
+        conn.commit()
+    
+    conn.close()
 
     join_room(room_code)
     user_rooms[user_id] = room_code
-    user_sessions[user_id] = username  # Ajouter l'hôte à user_sessions
+    user_sessions[user_id] = username
 
-    # Créer la salle sans ajouter l'hôte à la liste des joueurs
+    # Créer la salle avec l'ID de jeu
     active_rooms[room_code] = {
-        'host': username,  # Stocker l'hôte séparément
+        'game_id': game_id,  # Stocker l'ID de jeu
+        'host': username,
         'host_id': str(user_id),
         'quiz_id': quiz_id,
-        'players': {},  # Liste des joueurs (sans l'hôte)
-        'questions': quiz['questions'],
+        'players': {},
+        'questions': get_quiz_by_id(quiz_id)['questions'],
         'current_question': 0,
         'state': 'waiting',
         'start_time': None
     }
 
-    print(f"[DEBUG] Room created. Host ID: {user_id} (type: {type(user_id)})")
-    print(
-        f"[DEBUG] Initial players dict: {active_rooms[room_code]['players']}")
-
     emit('room_created', {'room_code': room_code, 'is_host': True})
-    emit('player_joined', {'players': []},
-         to=room_code)  # Aucun joueur au départ
+    emit('player_joined', {'players': []}, to=room_code)
 
 
 @socketio.on('join_room')
 def handle_join_room(data):
     user_id = request.sid
-    username = data.get('username')  # Pseudo du joueur
+    username = data.get('username')
     room_code = data.get('room_code')
-
-    print(
-        f"[DEBUG] User {username} (ID: {user_id}) is trying to join room {room_code}")
+    is_host = data.get('is_host', False)
 
     if room_code not in active_rooms:
-        room = get_room_by_code(room_code)
-        if not room:
-            emit('error', {'message': 'Room not found'})
-            return
-        emit(
-            'error', {'message': 'Room exists but host has not started the session yet'})
+        emit('error', {'message': 'Room not found'})
         return
 
     if active_rooms[room_code]['state'] != 'waiting':
@@ -782,25 +839,64 @@ def handle_join_room(data):
 
     join_room(room_code)
     user_rooms[user_id] = room_code
-    user_sessions[user_id] = username  # Ajouter le joueur à user_sessions
+    user_sessions[user_id] = username
 
-    # Ajouter le joueur à la liste des joueurs
+    # Enregistrer le joueur dans la base de données si ce n'est pas l'hôte
+    if not is_host:
+        conn = get_db_connection()
+        try:
+            # Vérifier si l'utilisateur existe déjà
+            cursor = conn.cursor()
+            cursor.execute("SELECT id FROM users WHERE username = ?", (username,))
+            user = cursor.fetchone()
+
+            if not user:
+                # Créer un utilisateur temporaire
+                cursor.execute(
+                    "INSERT INTO users (username, password) VALUES (?, 'anonymous')",
+                    (username,)
+                )
+                conn.commit()
+                user_id_db = cursor.lastrowid
+            else:
+                user_id_db = user['id']
+
+            # Vérifier si le joueur est déjà enregistré pour cette partie
+            cursor.execute('''
+                SELECT 1 FROM game_players 
+                WHERE game_id = ? AND user_id = ?
+            ''', (active_rooms[room_code]['game_id'], user_id_db))
+            exists = cursor.fetchone()
+
+            if not exists:
+                # Enregistrer le joueur
+                cursor.execute('''
+                    INSERT INTO game_players (game_id, user_id, score)
+                    VALUES (?, ?, 0)
+                ''', (active_rooms[room_code]['game_id'], user_id_db))
+                conn.commit()
+        except Exception as e:
+            print(f"Error saving player: {str(e)}")
+            conn.rollback()
+        finally:
+            conn.close()
+
+    # Ajouter le joueur à la liste en mémoire
     active_rooms[room_code]['players'][user_id] = {
         'username': username,
         'score': 0,
-        'answers': {}
+        'answers': {},
+        'is_host': is_host
     }
 
-    # Exclure l'hôte de la liste des joueurs
+    # Mettre à jour la liste des joueurs
     players_list = [
         {'id': pid, 'username': player['username'], 'score': player['score']}
         for pid, player in active_rooms[room_code]['players'].items()
-        # Exclure l'hôte
-        if player['username'] != active_rooms[room_code]['host']
+        if not player.get('is_host', False)
     ]
 
-    emit('player_joined', {'players': players_list},
-         to=room_code)  # Envoyer à tous dans la salle
+    emit('player_joined', {'players': players_list}, to=room_code)
 
 
 @socketio.on('start_game')
@@ -823,13 +919,9 @@ def handle_start_game(data):
 
     active_rooms[room_code]['state'] = 'playing'
     active_rooms[room_code]['start_time'] = datetime.now().timestamp()
-    # Commencer à la première question
     active_rooms[room_code]['current_question'] = 0
 
-    # Émettez l'événement game_started
     emit('game_started', to=room_code)
-
-    # Send the first question
     send_question(room_code)
 
 
@@ -930,12 +1022,8 @@ def handle_next_question(data):
         cursor = conn.cursor()
 
         try:
-            # Créer l'entrée de jeu
-            cursor.execute('''
-                INSERT INTO games (quiz_id, room_code, host_id)
-                VALUES (?, ?, (SELECT id FROM users WHERE username = ?))
-            ''', (room['quiz_id'], room_code, room['host']))
-            game_id = cursor.lastrowid
+            # Utiliser l'ID de jeu existant au lieu d'en créer un nouveau
+            game_id = room['game_id']
 
             # Enregistrer les joueurs et leurs réponses
             for pid, player in room['players'].items():
@@ -945,40 +1033,63 @@ def handle_next_question(data):
                 if user_result:
                     db_user_id = user_result['id']
                     
-                    # Enregistrer le joueur dans game_players
+                    # Vérifier si le joueur est déjà enregistré
                     cursor.execute('''
-                        INSERT INTO game_players (game_id, user_id, score)
-                        VALUES (?, ?, ?)
-                    ''', (game_id, db_user_id, player['score']))
+                        SELECT id FROM game_players 
+                        WHERE game_id = ? AND user_id = ?
+                    ''', (game_id, db_user_id))
+                    exists = cursor.fetchone()
+
+                    if not exists:
+                        # Enregistrer le joueur s'il n'existe pas déjà
+                        cursor.execute('''
+                            INSERT INTO game_players (game_id, user_id, score)
+                            VALUES (?, ?, ?)
+                        ''', (game_id, db_user_id, player['score']))
+                    else:
+                        # Mettre à jour le score si le joueur existe déjà
+                        cursor.execute('''
+                            UPDATE game_players 
+                            SET score = ?
+                            WHERE game_id = ? AND user_id = ?
+                        ''', (player['score'], game_id, db_user_id))
                     
-                    # Enregistrer les réponses
+                    # Enregistrer les réponses (vérifier d'abord si elles existent)
                     for q_idx, answer in player['answers'].items():
                         question = room['questions'][q_idx]
-                        is_correct = False
-                        
-                        if question['type'] != 'open_question' and answer != -1:
-                            options = []
-                            if question['type'] == 'true_false':
-                                options = ['Vrai', 'Faux']
-                            else:
-                                options = [
-                                    question.get('option_a'),
-                                    question.get('option_b'),
-                                    question.get('option_c'),
-                                    question.get('option_d')
-                                ]
-                            is_correct = (options[answer] == question['correct_answer'])
                         
                         cursor.execute('''
-                            INSERT INTO answers (game_id, question_id, user_id, answer_text, is_correct)
-                            VALUES (?, ?, ?, ?, ?)
-                        ''', (
-                            game_id,
-                            question['id'],
-                            db_user_id,
-                            str(answer) if answer != -1 else 'No answer',
-                            is_correct
-                        ))
+                            SELECT id FROM answers 
+                            WHERE game_id = ? AND question_id = ? AND user_id = ?
+                        ''', (game_id, question['id'], db_user_id))
+                        existing_answer = cursor.fetchone()
+
+                        if not existing_answer:
+                            is_correct = False
+                            
+                            if question['type'] != 'open_question' and answer != -1:
+                                options = []
+                                if question['type'] == 'true_false':
+                                    options = ['Vrai', 'Faux']
+                                else:
+                                    options = [
+                                        question.get('option_a'),
+                                        question.get('option_b'),
+                                        question.get('option_c'),
+                                        question.get('option_d')
+                                    ]
+                                is_correct = (options[answer] == question['correct_answer'])
+                            
+                            cursor.execute('''
+                                INSERT INTO answers (game_id, question_id, user_id, answer_text, is_correct)
+                                VALUES (?, ?, ?, ?, ?)
+                            ''', (
+                                game_id,
+                                question['id'],
+                                db_user_id,
+                                str(answer) if answer != -1 else 'No answer',
+                                is_correct
+                            ))
 
             conn.commit()
             
@@ -986,11 +1097,12 @@ def handle_next_question(data):
             players_list = [
                 {'id': pid, 'username': player['username'], 'score': player['score']}
                 for pid, player in room['players'].items()
+                if str(pid) != str(room['host_id'])  # Exclure l'hôte
             ]
             socketio.emit('game_over', {
                 'players': players_list, 
                 'quiz_id': room['quiz_id'],
-                'game_id': game_id  # Ajout de l'ID de la partie
+                'game_id': game_id
             }, to=room_code)
 
         except Exception as e:
