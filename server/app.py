@@ -26,6 +26,8 @@ from db import (
 from rag_wiki import generate_quiz_from_wikipedia
 from motcle import init_kbert, extract_kw
 from images import search_and_display_images, filtrer
+from trad import init_traduction, traduire
+from moteur_rech import correction_mot, init_model_recherche,charger_mots,chercher_bert, mot_existe,rechercher_re
 
 # from rag import generate_quiz,init_rag
 
@@ -47,10 +49,11 @@ reader = Reader(['en'], gpu=False)
 
 # Initialize database
 init_db()
-
+tokenizer_trad, model_trad = init_traduction()
 
 kb=init_kbert()
-
+mots=charger_mots()
+model_mr = init_model_recherche()
 # Active quiz rooms
 active_rooms = {}
 user_rooms = {}
@@ -251,32 +254,234 @@ def api_generate_quiz():
     except Exception as e:
         logging.exception("❌ Erreur inattendue pendant la génération du quiz")
         return jsonify({"error": str(e)}), 500
+    
 
 
-def search_unsplash_image(keyword):
+@app.route('/api/quizzes/traduction', methods=['POST'])
+def api_traduction():
+    print("🔥 Request received at /api/quizzes/traduction")
     try:
-        headers = {
-            "Authorization": f"Client-ID {UNSPLASH_KEY}"
-        }
-        params = {
-            "query": keyword,
-            "orientation": "landscape",
-            "per_page": 1
-        }
-        response = requests.get(
-            "https://api.unsplash.com/search/photos",
-            headers=headers,
-            params=params
-        )
-        response.raise_for_status()
-        data = response.json()
-        if data['results']:
-            return data['results'][0]['urls']['regular']
-        return None
-    except Exception as e:
-        logging.warning(f"Couldn't fetch image from Unsplash: {str(e)}")
-        return None
+        print("\n📥 [INFO] Requête POST reçue sur /api/quizzes/traduction")
+        data = request.get_json()
+        print("📦 Données JSON reçues :", data)
 
+        quiz_id = data.get("quiz_id")
+        print(f"🔍 [DEBUG] ID du quiz à traduire : {quiz_id}")
+        if not quiz_id:
+            print("❗ [ERREUR] quiz_id manquant dans les données envoyées.")
+            return jsonify({"error": "quiz_id manquant"}), 400
+
+        conn = sqlite3.connect("quiz.db")
+        cursor = conn.cursor()
+
+        print("🔎 [INFO] Recherche du quiz original dans la base...")
+        cursor.execute("SELECT title, description, user_id FROM quizzes WHERE id = ?", (quiz_id,))
+        quiz_row = cursor.fetchone()
+        if not quiz_row:
+            print("❌ [ERREUR] Quiz non trouvé pour l'ID donné.")
+            return jsonify({"error": "Quiz non trouvé"}), 404
+
+        original_title, original_description, user_id = quiz_row
+        print(f"📄 Titre original : {original_title}")
+        print(f"📝 Description originale : {original_description}")
+
+        print("🌍 Traduction du titre et de la description...")
+        translated_title = traduire(original_title, tokenizer_trad, model_trad)
+        translated_description = traduire(original_description, tokenizer_trad, model_trad)
+
+        print(f"✅ Titre traduit : {translated_title}")
+        print(f"✅ Description traduite : {translated_description}")
+
+        print("➕ Insertion du nouveau quiz traduit...")
+        cursor.execute(
+            "INSERT INTO quizzes (title, description, user_id) VALUES (?, ?, ?)",
+            (translated_title, translated_description, user_id)
+        )
+        new_quiz_id = cursor.lastrowid
+        print(f"🆕 Nouveau quiz inséré avec ID : {new_quiz_id}")
+
+        print("📥 Récupération des questions du quiz original...")
+        cursor.execute('''
+            SELECT question, option_a, option_b, option_c, option_d, correct_answer,
+                   type, points, time_limit, image_url, image_source
+            FROM questions WHERE quiz_id = ?
+        ''', (quiz_id,))
+        questions = cursor.fetchall()
+
+        print(f"📊 Nombre de questions récupérées : {len(questions)}")
+
+        for idx, row in enumerate(questions, 1):
+            question_text, a, b, c, d, correct, qtype, points, time_limit, img_url, img_src = row
+            print(f"\n--- 🔄 Traduction de la question {idx} ---")
+            print(f"❓ Texte original : {question_text}")
+
+            question_text = traduire(question_text, tokenizer_trad, model_trad)
+
+            if qtype == "qcm":
+                a = traduire(a, tokenizer_trad, model_trad)
+                b = traduire(b, tokenizer_trad, model_trad)
+                c = traduire(c, tokenizer_trad, model_trad)
+                d = traduire(d, tokenizer_trad, model_trad)
+                correct = traduire(correct, tokenizer_trad, model_trad)
+            elif qtype == "true_false":
+                a = "Vrai" if a.lower() == "true" else "Faux"
+                b = "Faux" if b.lower() == "false" else "Vrai"
+                c = d = None
+                correct = "Vrai" if correct.lower() == "true" else "Faux"
+            else:
+                a = b = c = d = correct = None 
+
+            print(f"✅ Texte traduit : {question_text}")
+
+            cursor.execute('''
+                INSERT INTO questions (
+                    quiz_id, question, option_a, option_b, option_c, option_d,
+                    correct_answer, type, points, time_limit, image_url, image_source
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                new_quiz_id, question_text, a, b, c, d, correct,
+                qtype, points, time_limit, img_url, img_src
+            ))
+            print(f"📥 Question insérée pour le quiz {new_quiz_id}")
+
+        conn.commit()
+        conn.close()
+        print("\n✅✅ Traduction complète et enregistrement réussi.")
+
+        response = {
+            "message": "✅ Quiz traduit et dupliqué avec succès",
+            "new_quiz_id": new_quiz_id
+        }
+        print("📤 Réponse envoyée au frontend :", response)
+        return jsonify(response), 200
+
+    except Exception as e:
+        logging.exception("❌ Erreur critique dans /api/quizzes/traduction")
+        print("🚨 Exception capturée :", str(e))
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/quizzes/mr', methods=['POST'])
+def moteur_recherche():
+    data = request.get_json()
+    print("📥 Requête reçue:", data)
+
+    search_text = data.get("query", "").strip()
+    liste_mots=search_text.split(" ")
+    for i in range(len(liste_mots)):
+        if not mot_existe(liste_mots[i], mots):
+            i = correction_mot(liste_mots[i])
+            liste_mots[i] = i
+    search_text = " ".join(liste_mots)
+             
+
+    filters = data.get("filters", [])
+    user_id = data.get("user_id", None)
+
+    query = "SELECT id, title, description FROM quizzes"
+    conditions = []
+    params = []
+
+    if search_text:
+        like_clause = f"%{search_text}%"
+        filter_conditions = []
+
+        if "all" in filters or not filters:
+            filter_conditions.extend(["title LIKE ?", "description LIKE ?"])
+            params.extend([like_clause, like_clause])
+        else:
+            if "titles" in filters:
+                filter_conditions.append("title LIKE ?")
+                params.append(like_clause)
+            if "descriptions" in filters:
+                filter_conditions.append("description LIKE ?")
+                params.append(like_clause)
+
+        if filter_conditions:
+            conditions.append(f"({' OR '.join(filter_conditions)})")
+
+    if user_id:
+        conditions.append("user_id = ?")
+        params.append(user_id)
+
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+
+    print("🛠️ SQL:", query)
+    print("📦 Params:", params)
+
+    try:
+        conn = sqlite3.connect("quiz.db")
+        cursor = conn.cursor()
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        results = [
+            {"id": row[0], "title": row[1], "description": row[2]}
+            for row in rows
+        ]
+
+        if not results:
+            print("🔍 Aucun résultat trouvé, récupération de tous les quiz...")
+
+            cursor.execute("SELECT id, title, description FROM quizzes")
+            rows = cursor.fetchall()
+            traiter = []
+
+            for row in rows:
+                quiz_id, title, description = row
+
+                cursor.execute("SELECT id, question FROM questions WHERE quiz_id = ?", (quiz_id,))
+                questions = cursor.fetchall()
+                questions_formatted = [{"id": q[0], "question": q[1]} for q in questions]
+
+                traiter.append({
+                    "id": quiz_id,
+                    "title": title,
+                    "description": description,
+                    "questions": questions_formatted
+                })
+
+            
+            found_ids = set()
+            for quiz in traiter:
+                match = False
+                if "titles" in filters and chercher_bert(search_text, quiz['title'], model_mr):
+                    match = True
+                elif "descriptions" in filters and chercher_bert(search_text, quiz['description'], model_mr):
+                    match = True
+                elif "questions" in filters:
+                    for question in quiz['questions']:
+                        if chercher_bert(search_text, question['question'], model_mr):
+                            match = True
+                            break
+                elif "all" in filters or not filters:
+                    if (chercher_bert(search_text, quiz['title'], model_mr) or
+                        chercher_bert(search_text, quiz['description'], model_mr) or
+                        any(chercher_bert(search_text, q['question'], model_mr) for q in quiz['questions'])):
+                        match = True
+
+                if match and quiz['id'] not in found_ids:
+                    results.append({
+                        "id": quiz['id'],
+                        "title": quiz['title'],
+                        "description": quiz['description']
+                    })
+                    found_ids.add(quiz['id'])
+
+            conn.close()
+            return jsonify({"results": results})
+
+
+
+    except Exception as e:
+        print("❌ Erreur SQL:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+    
+    
 
 @app.route('/api/unsplash/search', methods=['GET'])
 def search_unsplash():
