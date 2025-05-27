@@ -4,6 +4,8 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { FaTrash, FaSearch } from 'react-icons/fa';
 import { BsThreeDotsVertical } from 'react-icons/bs';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, CheckCircle } from 'lucide-react';
 
 interface Quiz {
   id: number;
@@ -18,6 +20,9 @@ const QuizList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchFilters, setSearchFilters] = useState<string[]>([]);
   const { user } = useAuth();
+  // États pour la notification de traduction
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translationSuccess, setTranslationSuccess] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -30,6 +35,16 @@ const QuizList: React.FC = () => {
       })
       .catch(error => console.error("❌ Error loading quizzes:", error));
   }, [user]);
+
+  // Reset le succès de la traduction après 3 secondes
+  useEffect(() => {
+    if (translationSuccess) {
+      const timer = setTimeout(() => {
+        setTranslationSuccess(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [translationSuccess]);
 
   const handleDeleteQuiz = async (quizId: number) => {
     try {
@@ -48,25 +63,25 @@ const QuizList: React.FC = () => {
 
   const handleSearch = async () => {
     if (!user) return;
-    
+
     console.log("🔍 Starting search with:", {
       searchTerm,
       searchFilters,
       userId: user.id
     });
-  
+
     try {
       const response = await axios.post<{ results: Quiz[] }>('http://localhost:5000/api/quizzes/mr', {
         query: searchTerm,
         filters: searchFilters,
         user_id: user.id
       });
-      
+
       console.log("📊 Search response:", {
         status: response.status,
         data: response.data
       });
-  
+
       setQuizzes(response.data.results);
       console.log("🔎 Search results:", response.data.results);
     } catch (err) {
@@ -85,12 +100,61 @@ const QuizList: React.FC = () => {
     }
   };
 
+  const handleTranslate = (quizId: number) => {
+    setIsTranslating(true);
+    setTranslationSuccess(false);
+
+    console.log("🌐 Translating quiz:", quizId);
+    fetch('http://localhost:5000/api/quizzes/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ quiz_id: quizId })
+    })
+      .then(res => res.json())
+      .then(data => {
+        console.log("✅ Translation successful:", data);
+        setIsTranslating(false);
+        setTranslationSuccess(true);
+      })
+      .catch(err => {
+        console.error("❌ Translation error:", err);
+        setIsTranslating(false);
+        alert("Translation error.");
+      });
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg relative">
+      {/* Notification de traduction */}
+      <AnimatePresence>
+        {(isTranslating || translationSuccess) && (
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 30 }}
+            className="fixed bottom-6 right-6 bg-white border border-red-300 shadow-lg rounded-xl px-6 py-4 z-50 w-80"
+          >
+            {isTranslating && (
+              <div className="flex items-center space-x-3">
+                <Loader2 className="animate-spin text-[#E71722]" />
+                <span className="text-sm text-gray-700">Translating quiz, please wait...</span>
+              </div>
+            )}
+
+            {translationSuccess && (
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="text-green-500" />
+                <span className="font-medium text-green-700">Quiz translated successfully!</span>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-2xl font-bold text-[#E71722]">My Quizzes</h2>
-        <button 
-          onClick={() => setShowSearch(!showSearch)} 
+        <button
+          onClick={() => setShowSearch(!showSearch)}
           className="text-[#E71722] hover:text-[#C1121F] transition-colors"
           title="Search"
         >
@@ -141,18 +205,18 @@ const QuizList: React.FC = () => {
 
       {quizzes.length === 0 ? (
         <p className="text-gray-600">
-          No quizzes found. 
+          No quizzes found.
           <Link to="/quizzes/create" className="text-[#E71722] underline hover:text-[#C1121F] ml-1 transition-colors">
             Create one?
           </Link>
-        </p> 
+        </p>
       ) : (
         <ul>
           {quizzes.map(quiz => (
             <li key={quiz.id} className="border-b py-2 flex justify-between items-center relative">
               <div className="flex-1">
-                <Link 
-                  to={`/quizzes/edit/${quiz.id}`} 
+                <Link
+                  to={`/quizzes/edit/${quiz.id}`}
                   className="text-[#E71722] font-medium hover:text-[#C1121F] hover:underline transition-colors"
                 >
                   {quiz.title}
@@ -193,23 +257,7 @@ const QuizList: React.FC = () => {
                         Duplicate
                       </Link>
                       <button
-                        onClick={() => {
-                          console.log("🌐 Translating quiz:", quiz.id);
-                          fetch('http://localhost:5000/api/quizzes/translate', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ quiz_id: quiz.id })
-                          })
-                          .then(res => res.json())
-                          .then(data => {
-                            console.log("✅ Translation successful:", data);
-                            alert("Quiz translated successfully!");
-                          })
-                          .catch(err => {
-                            console.error("❌ Translation error:", err);
-                            alert("Translation error.");
-                          });
-                        }}
+                        onClick={() => handleTranslate(quiz.id)}
                         className="block px-4 py-2 hover:bg-gray-100 w-full text-left"
                       >
                         Translate

@@ -176,9 +176,6 @@ const OpenQuestionStats: React.FC<{
 };
 
 const GameDetailsView: React.FC<{ details: GameDetails; onBack: () => void }> = ({ details, onBack }) => {
-  const qcmQuestions = details.questions.filter(q => q.type !== 'open_question');
-  const openQuestions = details.questions.filter(q => q.type === 'open_question');
-
   return (
     <div>
       <button
@@ -213,33 +210,32 @@ const GameDetailsView: React.FC<{ details: GameDetails; onBack: () => void }> = 
 
       <h3 className="text-xl font-bold text-[#E71722] mb-4">Questions Analysis</h3>
 
-      <div className="mb-8">
-        <h4 className="font-semibold text-lg mb-2">Multiple Choice & True/False Questions</h4>
-        {qcmQuestions.map(question => (
-          <QuestionStats key={question.id} question={question} />
-        ))}
-      </div>
+      {details.questions.map((question, index) => {
+        const isOpen = question.type === 'open_question';
+        const relatedOpenAnswers = details.open_answers.filter(a => a.question_id === question.id);
 
-      <div>
-        <h4 className="font-semibold text-lg mb-2">Open Questions</h4>
-        {openQuestions.map(question => {
-          const answers = details.open_answers.filter(a => a.question_id === question.id);
-          return (
-            <OpenQuestionStats
-              key={question.id}
-              question={question}
-              answers={answers.map(a => ({
-                username: a.username,
-                answer_text: a.answer_text,
-                is_correct: a.is_correct
-              }))}
-            />
-          );
-        })}
-      </div>
+        return (
+          <div key={question.id} className="mb-6">
+            <h4 className="text-lg font-semibold text-gray-800 mb-2">Question {index + 1}</h4>
+            {isOpen ? (
+              <OpenQuestionStats
+                question={question}
+                answers={relatedOpenAnswers.map(a => ({
+                  username: a.username,
+                  answer_text: a.answer_text,
+                  is_correct: a.is_correct
+                }))}
+              />
+            ) : (
+              <QuestionStats question={question} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
+
 
 const ReportPage: React.FC = () => {
   const { user } = useAuth();
