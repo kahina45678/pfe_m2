@@ -1,4 +1,3 @@
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -155,6 +154,8 @@ const Quiz: React.FC = () => {
   const [showScores, setShowScores] = useState(false);
   const [showScoresModal, setShowScoresModal] = useState(false);
   const [showOpenAnswers, setShowOpenAnswers] = useState(false);
+  const [isPreparing, setIsPreparing] = useState(false);
+  const [preparationCountdown, setPreparationCountdown] = useState(5);
   const username = location.state?.username || user?.username;
 
   const qcmColors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500'];
@@ -231,8 +232,21 @@ const Quiz: React.FC = () => {
     newSocket.on('game_started', () => {
       setGameState('playing');
       setOpenAnswersList([]);
+      // Ajouter la préparation pour la première question
+      setIsPreparing(true);
+      setPreparationCountdown(5);
+    });
+    newSocket.on('preparing_next', (data) => {
+      setIsPreparing(true);
+      setPreparationCountdown(5);
+      setCurrentQuestionIndex(data.question_number - 1);
+      setCanAnswer(false);
+      setAnswerSubmitted(false);
+      setSelectedAnswer(null);
+      setOpenAnswer('');
     });
     newSocket.on('new_question', (data) => {
+      setIsPreparing(false);
       setCurrentQuestion(data);
       setSelectedAnswer(null);
       setCurrentQuestionIndex(data.question_number - 1);
@@ -284,20 +298,36 @@ const Quiz: React.FC = () => {
   }, [roomCode, username, user?.id]);
 
   useEffect(() => {
-    if (!currentQuestion) return;
+    if (isPreparing) {
+      const timer = setInterval(() => {
+        setPreparationCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
 
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 0) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [isPreparing]);
 
-    return () => clearInterval(timer);
-  }, [currentQuestion, canAnswer]);
+  useEffect(() => {
+    if (!isPreparing && currentQuestion) {
+      const timer = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 0) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [isPreparing, currentQuestion, canAnswer]);
 
   const handleStartGame = () => {
     if (socket && isHost) {
@@ -450,6 +480,30 @@ const Quiz: React.FC = () => {
           >
             Leave Room
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPreparing) {
+    return (
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center">
+        <div className="text-center max-w-2xl p-8">
+          <h2 className="text-4xl font-bold text-[#E71722] mb-6">
+            {currentQuestionIndex === 0 ?
+              "Le quiz va commencer !" :
+              `Préparez-vous pour la question ${currentQuestionIndex + 1}`}
+          </h2>
+          <div className="flex justify-center mb-8">
+            <div className="text-6xl font-bold text-[#E71722] animate-pulse">
+              {preparationCountdown}
+            </div>
+          </div>
+          <p className="text-xl text-gray-600">
+            {currentQuestionIndex === 0 ?
+              "La première question arrive bientôt..." :
+              "La question suivante arrive dans quelques secondes..."}
+          </p>
         </div>
       </div>
     );

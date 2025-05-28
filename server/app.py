@@ -1,4 +1,3 @@
-
 import logging
 import re
 from flask import Flask, request, jsonify, session
@@ -28,7 +27,9 @@ from rag_wiki import generate_quiz_from_wikipedia
 from motcle import init_kbert, extract_kw
 from images import search_and_display_images, filtrer
 from trad import init_traduction, traduire
-from moteur_rech import correction_mot, init_model_recherche, charger_mots, chercher_bert, mot_existe, rechercher_re
+from moteur_rech import correction_mot, init_model_recherche, charger_mots, chercher_bert, init_speller
+from bs import convertir_ascii, binary_search
+
 
 # from rag import generate_quiz,init_rag
 
@@ -55,6 +56,8 @@ tokenizer_trad, model_trad = init_traduction()
 kb = init_kbert()
 mots = charger_mots()
 model_mr = init_model_recherche()
+liste_mots_ascii = charger_mots()
+spell = init_speller()
 # Active quiz rooms
 active_rooms = {}
 user_rooms = {}
@@ -370,78 +373,89 @@ def api_traduction():
 
 @app.route('/api/quizzes/mr', methods=['POST'])
 def moteur_recherche():
-    data = request.get_json()
-    print("📥 Requête reçue:", data)
-
-    search_text = data.get("query", "").strip()
-    liste_mots = search_text.split(" ")
-    for i in range(len(liste_mots)):
-        if not mot_existe(liste_mots[i], mots):
-            i = correction_mot(liste_mots[i])
-            liste_mots[i] = i
-    search_text = " ".join(liste_mots)
-
-    filters = data.get("filters", [])
-    user_id = data.get("user_id", None)
-
-    query = "SELECT id, title, description FROM quizzes"
-    conditions = []
-    params = []
-
-    if search_text:
-        like_clause = f"%{search_text}%"
-        filter_conditions = []
-
-        if "all" in filters or not filters:
-            filter_conditions.extend(["title LIKE ?", "description LIKE ?"])
-            params.extend([like_clause, like_clause])
-        else:
-            if "titles" in filters:
-                filter_conditions.append("title LIKE ?")
-                params.append(like_clause)
-            if "descriptions" in filters:
-                filter_conditions.append("description LIKE ?")
-                params.append(like_clause)
-
-        if filter_conditions:
-            conditions.append(f"({' OR '.join(filter_conditions)})")
-
-    if user_id:
-        conditions.append("user_id = ?")
-        params.append(user_id)
-
-    if conditions:
-        query += " WHERE " + " AND ".join(conditions)
-
-    print("🛠️ SQL:", query)
-    print("📦 Params:", params)
-
     try:
+        data = request.get_json()
+        print("📥 Requête reçue:", data)
+
+        # Traitement du texte de recherche
+        search_text = data.get("query", "").strip()
+        liste_mots = search_text.split(" ")
+        for i in range(len(liste_mots)):
+            mot_ascii = convertir_ascii(liste_mots[i])
+            if not binary_search(mots, mot_ascii):
+                correction = correction_mot(liste_mots[i])
+                # Correction: utilisation de la variable 'correction'
+                liste_mots[i] = correction
+        search_text = " ".join(liste_mots)
+
+        # Récupération des filtres
+        filters = data.get("filters", [])
+        user_id = data.get("user_id", None)
+
+        # Construction de la requête SQL
+        query = "SELECT id, title, description FROM quizzes"
+        conditions = []
+        params = []
+
+        if search_text:
+            like_clause = f"%{search_text}%"
+            filter_conditions = []
+
+            if "all" in filters or not filters:
+                filter_conditions.extend(
+                    ["title LIKE ?", "description LIKE ?"])
+                params.extend([like_clause, like_clause])
+            else:
+                if "titles" in filters:
+                    filter_conditions.append("title LIKE ?")
+                    params.append(like_clause)
+                if "descriptions" in filters:
+                    filter_conditions.append("description LIKE ?")
+                    params.append(like_clause)
+
+            if filter_conditions:
+                conditions.append(f"({' OR '.join(filter_conditions)})")
+
+        if user_id:
+            conditions.append("user_id = ?")
+            params.append(user_id)
+
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+
+        print("🛠️ SQL:", query)
+        print("📦 Params:", params)
+
+        # Exécution de la requête
         conn = sqlite3.connect("quiz.db")
         cursor = conn.cursor()
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
+        # Formatage des résultats
         results = [
             {"id": row[0], "title": row[1], "description": row[2]}
             for row in rows
         ]
 
+        # Si aucun résultat, recherche étendue avec BERT
         if not results:
             print("🔍 Aucun résultat trouvé, récupération de tous les quiz...")
-
             cursor.execute("SELECT id, title, description FROM quizzes")
             rows = cursor.fetchall()
             traiter = []
+            found_ids = set()
 
             for row in rows:
                 quiz_id, title, description = row
-
                 cursor.execute(
-                    "SELECT id, question FROM questions WHERE quiz_id = ?", (quiz_id,))
+                    "SELECT id, question FROM questions WHERE quiz_id = ?",
+                    (quiz_id,)
+                )
                 questions = cursor.fetchall()
                 questions_formatted = [
-                    {"id": q[0], "question": q[1]} for q in questions]
+                    {"id": q[0], "question": q[1]} for q in questions
+                ]
 
                 traiter.append({
                     "id": quiz_id,
@@ -450,7 +464,6 @@ def moteur_recherche():
                     "questions": questions_formatted
                 })
 
-            found_ids = set()
             for quiz in traiter:
                 match = False
                 if "titles" in filters and chercher_bert(search_text, quiz['title'], model_mr):
@@ -476,12 +489,15 @@ def moteur_recherche():
                     })
                     found_ids.add(quiz['id'])
 
-            conn.close()
-            return jsonify({"results": results})
+        conn.close()
+        return jsonify({"results": results})  # Retour explicite
 
-    except Exception as e:
+    except sqlite3.Error as e:
         print("❌ Erreur SQL:", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Erreur de base de données: {str(e)}"}), 500
+    except Exception as e:
+        print("❌ Erreur inattendue:", e)
+        return jsonify({"error": f"Erreur serveur: {str(e)}"}), 500
 
 
 @app.route('/api/unsplash/search', methods=['GET'])
@@ -878,6 +894,17 @@ def delete_game_history():
         conn.close()
 
 
+def send_preparation(room_code):
+    """Envoyer une notification de préparation avant la question"""
+    room = active_rooms[room_code]
+    current_q = room['current_question']
+
+    socketio.emit('preparing_next', {
+        'question_number': current_q + 1,
+        'total_questions': len(room['questions'])
+    }, room=room_code)
+
+
 def send_question(room_code):
     room = active_rooms[room_code]
     current_q = room['current_question']
@@ -941,9 +968,6 @@ def send_question(room_code):
             f"[DEBUG] Timer expired for question {current_q + 1} in room {room_code}")
         # Juste notifier que le temps est écoulé
         socketio.emit('time_up', to=room_code)
-
-    if room_code in timers:
-        timers[room_code].join()  # Arrêter le timer précédent s'il existe
 
     timers[room_code] = socketio.start_background_task(
         start_timer, room_code, question.get('time_limit', 15))
@@ -1222,7 +1246,18 @@ def handle_next_question(data):
     room['current_question'] += 1
 
     if room['current_question'] < len(room['questions']):
-        send_question(room_code)
+        # Envoyer d'abord la notification de préparation
+        send_preparation(room_code)
+
+        # Démarrer un timer pour envoyer la vraie question après 5 secondes
+        def delayed_question():
+            socketio.sleep(5)
+            send_question(room_code)
+
+        if room_code in timers:
+            timers[room_code].join()
+
+        timers[room_code] = socketio.start_background_task(delayed_question)
     else:
         # End game
         room['state'] = 'finished'
