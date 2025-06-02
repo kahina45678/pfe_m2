@@ -4,29 +4,24 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.llms import HuggingFacePipeline
 import os
-
-
+from langchain.llms import Ollama
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 
 
-# Global variables
-llm = None
-retriever = None
+# # Global variables
+# llm = None
+# retriever = None
 
-def init_rag():
-    global llm, retriever
+def load_mistral_from_ollama():
+    print("[INFO] Loading Mistral model from Ollama...")
+    return Ollama(model="mistral")
 
-    # Load model/tokenizer
-    model_name = os.getenv("LLM_MODEL_NAME", "mistralai/Mistral-7B-v0.1")
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype="auto")
-    pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=1024, temperature=0.3,framework="pt")
-    llm = HuggingFacePipeline(pipeline=pipe)
 
-    # Load PDF & FAISS
-    loader = PyPDFLoader("data_rag_gestion-1.pdf")
+
+def init_vectorstore(file):
+    loader = PyPDFLoader(file)
     documents = loader.load()
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     texts = splitter.split_documents(documents)
@@ -40,6 +35,8 @@ def init_rag():
         vectorstore.save_local("index")
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
+    return retriever
+
 
 
 
@@ -102,7 +99,7 @@ PROMPT_TEMPLATES = {
 
 # --- Quiz Generation Function ---
 
-def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str = "MCQ"):
+def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str = "MCQ",retriever=None, llm=None):
     """
     Generates quiz questions of a specified type, difficulty, and subject
     based on retrieved document context.
@@ -178,40 +175,40 @@ def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str
     # --- END OF BLOCK THAT MUST BE INSIDE FUNCTION ---
 
 
-# --- Examples of Usage ---
+# # --- Examples of Usage ---
 
-# Example 1: Generate 3 easy MCQ questions about "gestion"
-# Assuming your document is about management based on the file name
-print("\n--- Generating 3 Easy MCQ about Gestion ---")
-# Make sure LLM and retriever are initialized before calling
-if llm is not None and retriever is not None:
-    quiz_mcq = generate_quiz("easy", "gestion", 3, "MCQ")
-    print("📢 Résultat MCQ:\n", quiz_mcq)
-else:
-    print("Skipping quiz generation due to initialization errors.")
-
-
-# Example 2: Generate 2 medium Free Text questions about "gestion"
-print("\n--- Generating 2 Medium Free Text about Gestion ---")
-if llm is not None and retriever is not None:
-    quiz_freetext = generate_quiz("medium", "gestion", 2, "Free Text")
-    print("📢 Résultat Free Text:\n", quiz_freetext)
-else:
-     print("Skipping quiz generation due to initialization errors.")
+# # Example 1: Generate 3 easy MCQ questions about "gestion"
+# # Assuming your document is about management based on the file name
+# print("\n--- Generating 3 Easy MCQ about Gestion ---")
+# # Make sure LLM and retriever are initialized before calling
+# if llm is not None and retriever is not None:
+#     quiz_mcq = generate_quiz("easy", "gestion", 3, "MCQ")
+#     print("📢 Résultat MCQ:\n", quiz_mcq)
+# else:
+#     print("Skipping quiz generation due to initialization errors.")
 
 
-# Example 3: Generate 4 hard True/False questions about "gestion"
-print("\n--- Generating 4 Hard True/False about Gestion ---")
-if llm is not None and retriever is not None:
-    quiz_truefalse = generate_quiz("hard", "gestion", 4, "True/False")
-    print("📢 Résultat True/False:\n", quiz_truefalse)
-else:
-    print("Skipping quiz generation due to initialization errors.")
+# # Example 2: Generate 2 medium Free Text questions about "gestion"
+# print("\n--- Generating 2 Medium Free Text about Gestion ---")
+# if llm is not None and retriever is not None:
+#     quiz_freetext = generate_quiz("medium", "gestion", 2, "Free Text")
+#     print("📢 Résultat Free Text:\n", quiz_freetext)
+# else:
+#      print("Skipping quiz generation due to initialization errors.")
 
-# Example 4: Invalid question type
-print("\n--- Attempting to generate with invalid type ---")
-if llm is not None and retriever is not None:
-    invalid_quiz = generate_quiz("easy", "gestion", 1, "Short Answer") # This will trigger the validation error
-    print("📢 Résultat Invalid Type:\n", invalid_quiz)
-else:
-    print("Skipping quiz generation due to initialization errors.")
+
+# # Example 3: Generate 4 hard True/False questions about "gestion"
+# print("\n--- Generating 4 Hard True/False about Gestion ---")
+# if llm is not None and retriever is not None:
+#     quiz_truefalse = generate_quiz("hard", "gestion", 4, "True/False")
+#     print("📢 Résultat True/False:\n", quiz_truefalse)
+# else:
+#     print("Skipping quiz generation due to initialization errors.")
+
+# # Example 4: Invalid question type
+# print("\n--- Attempting to generate with invalid type ---")
+# if llm is not None and retriever is not None:
+#     invalid_quiz = generate_quiz("easy", "gestion", 1, "Short Answer") # This will trigger the validation error
+#     print("📢 Résultat Invalid Type:\n", invalid_quiz)
+# else:
+#     print("Skipping quiz generation due to initialization errors.")

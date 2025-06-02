@@ -7,6 +7,7 @@ import { io } from "socket.io-client";
 import AIQuizModal from '../components/AIQuizModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useInView } from 'react-intersection-observer';
+import DocumentQuizModal from '../components/DocumentQuizModal';
 
 interface Quiz {
   id: number;
@@ -63,6 +64,7 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -270,7 +272,7 @@ const Home: React.FC = () => {
                 <motion.button
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => navigate('/quizzes/create/document')}
+                  onClick={() => setShowDocumentModal(true)}
                   className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-4 rounded-lg focus:outline-none focus:shadow-outline transition-colors w-full shadow-md"
                 >
                   Create from Document
@@ -357,6 +359,13 @@ const Home: React.FC = () => {
         <AIQuizModal
           isOpen={showAIModal}
           onClose={() => setShowAIModal(false)}
+          userId={user.id}
+        />
+      )}
+      {user && (
+        <DocumentQuizModal
+          isOpen={showDocumentModal}
+          onClose={() => setShowDocumentModal(false)}
           userId={user.id}
         />
       )}

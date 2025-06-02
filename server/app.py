@@ -1,3 +1,5 @@
+from werkzeug.utils import secure_filename
+from flask import request, jsonify
 import logging
 import re
 from flask import Flask, request, jsonify, session
@@ -12,6 +14,7 @@ import qrcode
 import os
 from urllib.parse import urlparse
 import io
+import tempfile
 from dotenv import load_dotenv
 import base64
 from threading import Timer
@@ -31,7 +34,7 @@ from moteur_rech import correction_mot, init_model_recherche, charger_mots, cher
 from bs import convertir_ascii, binary_search
 
 
-# from rag import generate_quiz,init_rag
+from rag_doc import generate_quiz, init_vectorstore, load_mistral_from_ollama
 
 # Initialize Flask app
 
@@ -41,7 +44,7 @@ CORS(app, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 load_dotenv()
-# init_rag()
+# llm_rag_doc= init_rag()
 # Configuration Unsplash
 # UNSPLASH_KEY = os.environ['UNSPLASH_KEY']
 UNSPLASH_KEY = 'Ee0ofjghUT6ONRqY-Lb5S68AMNrQ5xUjrcNyGF3fZo8'
@@ -62,8 +65,198 @@ spell = init_speller()
 active_rooms = {}
 user_rooms = {}
 timers = {}  # Pour stocker les timers de chaque room
-
+llm = load_mistral_from_ollama()
 # Routes
+
+
+@app.route('/api/quizzes/create-from-pdf', methods=['POST'])
+def api_generate_quiz_doc():
+    # Vérifier si un fichier a été envoyé
+    if 'file' not in request.files:
+        return jsonify({"error": "No file part"}), 400
+
+    file = request.files['file']
+
+    # Vérifier si un fichier a été sélectionné
+    if file.filename == '':
+        return jsonify({"error": "No selected file"}), 400
+
+    # Vérifier que c'est un PDF
+    if not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "File must be a PDF"}), 400
+
+    # Initialisation des variables
+    temp_path = None
+    retriever = None
+
+    try:
+        # Créer un répertoire temporaire dédié
+        temp_dir = os.path.join(tempfile.gettempdir(), 'quizmaster_uploads')
+        os.makedirs(temp_dir, exist_ok=True)  # Crée le dossier si inexistant
+
+        # Sécuriser le nom du fichier et créer le chemin complet
+        filename = secure_filename(file.filename)
+        temp_path = os.path.normpath(os.path.join(temp_dir, filename))
+
+        # Sauvegarder le fichier
+        file.save(temp_path)
+
+        # Récupérer les autres paramètres
+        data = request.form
+        print('Request received:', data)
+
+        subject = data.get("theme", "general")
+        difficulty = data.get("difficulty", "medium")
+        nb_qst = int(data.get("count", 5))
+        qtype = data.get("qtype", "MCQ")
+
+        # Initialiser le vectorstore
+        retriever = init_vectorstore(temp_path)
+
+        # Générer le quiz
+        quiz = generate_quiz(difficulty, subject, nb_qst,
+                             qtype, retriever, llm)
+        print("Raw quiz results:", quiz)
+
+        # Traitement des questions
+        questions = []
+
+        if qtype == "MCQ":
+            pattern = re.compile(r"""
+                \s*(\d+)[\.\)]\s*                        # Numéro de question
+                (?:Question:)?\s*(.*?)\n                 # Énoncé
+                (?:\s{6,}.+\n)*                          # Lignes supplémentaires
+                \s*A\)\s+((?:.+\n)+?)                    # Option A
+                \s*B\)\s+((?:.+\n)+?)                    # Option B
+                \s*C\)\s+((?:.+\n)+?)                    # Option C
+                \s*D\)\s+((?:.+\n)+?)                    # Option D
+                \s*Answers?:\s*(?:\(|\[)?([ABCD])(?:\)|\])?  # Réponse
+            """, re.VERBOSE)
+
+            for match in pattern.finditer(quiz):
+                questions.append({
+                    "question": match.group(2).strip(),
+                    "propositions": [match.group(i).strip() for i in range(3, 7)],
+                    "correct_answer": match.group(7).strip(),
+                    "image": None,
+                    "type": "qcm"
+                })
+
+        elif qtype == "true_false":
+            pattern = re.compile(
+                r"\d+\)\s*(.+?)\nAnswer:\s*(True|False)", re.IGNORECASE)
+            for match in pattern.finditer(quiz):
+                questions.append({
+                    "question": match.group(1).strip(),
+                    "propositions": ["True", "False"],
+                    "correct_answer": match.group(2).capitalize(),
+                    "image": None,
+                    "type": "true_false"
+                })
+
+        elif qtype == "Open":
+            pattern = re.compile(r"\d+\)\s*(.+?)\nAnswer:\s*(.+)", re.DOTALL)
+            for match in pattern.finditer(quiz):
+                questions.append({
+                    "question": match.group(1).strip(),
+                    "propositions": [],
+                    "image": None,
+                    "type": "open_question"
+                })
+
+        if not questions:
+            return jsonify({"error": "Failed to parse questions from model response"}), 500
+
+        # Enrichir avec images
+        for qst in questions:
+            try:
+                mot_cle = extract_kw(kb, qst['question']) or subject
+                images = search_and_display_images(mot_cle)
+                if images:
+                    qst["image"] = {
+                        "url": filtrer(images),
+                        "source": "unsplash"
+                    }
+            except Exception as e:
+                logging.error(f"Image processing error: {str(e)}")
+                qst["image"] = None
+
+        # Sauvegarde en base
+        conn = None
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            title = f"Quiz on {subject.capitalize()} ({difficulty.capitalize()})"
+            description = f"Auto-generated quiz about {subject}."
+            user_id = data.get("user_id", 987654321)
+
+            cursor.execute('''
+                INSERT INTO quizzes (title, description, user_id)
+                VALUES (?, ?, ?)
+            ''', (title, description, user_id))
+
+            quiz_id = cursor.lastrowid
+
+            for qst in questions:
+                props = qst["propositions"]
+                correct = qst["correct_answer"]
+
+                if qst["type"] == "qcm":
+                    letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
+                    idx = letter_to_index.get(correct.upper(), None)
+                    correct_text = props[idx] if idx is not None and idx < len(
+                        props) else correct
+                elif qst["type"] == "true_false":
+                    correct_text = "Vrai" if correct.lower() == "true" else "Faux"
+                else:
+                    correct_text = correct
+
+                cursor.execute('''
+                    INSERT INTO questions (
+                        quiz_id, question, option_a, option_b, option_c, option_d,
+                        correct_answer, type, image_url, image_source
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    quiz_id,
+                    qst["question"],
+                    props[0] if len(props) > 0 else None,
+                    props[1] if len(props) > 1 else None,
+                    props[2] if len(props) > 2 else None,
+                    props[3] if len(props) > 3 else None,
+                    correct_text,
+                    qst["type"],
+                    qst["image"]["url"] if qst["image"] else None,
+                    qst["image"]["source"] if qst["image"] else "none"
+                ))
+
+            conn.commit()
+            return jsonify({"success": True, "quiz_id": quiz_id}), 201
+
+        except Exception as db_err:
+            logging.exception("Database error")
+            if conn:
+                conn.rollback()
+            return jsonify({"error": "Database error"}), 500
+
+        finally:
+            if conn:
+                conn.close()
+
+    except Exception as e:
+        logging.exception("Unexpected error during quiz generation")
+        return jsonify({
+            "error": "Failed to generate quiz",
+            "details": str(e)
+        }), 500
+
+    finally:
+        # Nettoyage garantie du fichier temporaire
+        if temp_path and os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception as e:
+                logging.error(f"Failed to delete temp file: {str(e)}")
 
 
 @app.route('/api/quizzes/ai', methods=['POST'])
