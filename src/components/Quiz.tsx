@@ -232,6 +232,7 @@ const Quiz: React.FC = () => {
     newSocket.on('game_started', () => {
       setGameState('playing');
       setOpenAnswersList([]);
+      // Ajouter la préparation pour la première question
       setIsPreparing(true);
       setPreparationCountdown(5);
     });
@@ -590,15 +591,14 @@ const Quiz: React.FC = () => {
 
             {/* Answers */}
             {currentQuestion?.type !== 'open_question' && (
-              <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="w-full max-w-4xl grid grid-cols-2 gap-4">
                 {currentQuestion?.type === 'true_false' ? (
                   ['Vrai', 'Faux'].map((option, index) => {
                     const isCorrect = correctAnswer === option;
                     return (
                       <div
                         key={index}
-                        className={`${trueFalseColors[index]} text-white p-4 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all min-h-[120px] ${!canAnswer && isCorrect ? 'ring-4 ring-green-400' : ''
-                          }`}
+                        className={`${trueFalseColors[index]} text-white p-6 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all ${!canAnswer && isCorrect ? 'ring-4 ring-green-400' : ''}`}
                       >
                         <div className="text-4xl font-bold mb-2">{option}</div>
                         {!canAnswer && isCorrect && (
@@ -617,13 +617,10 @@ const Quiz: React.FC = () => {
                     return (
                       <div
                         key={index}
-                        className={`${color} text-white p-4 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all min-h-[120px] ${!canAnswer && isCorrect ? 'ring-4 ring-green-400' : ''
-                          }`}
+                        className={`${color} text-white p-6 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all ${!canAnswer && isCorrect ? 'ring-4 ring-green-400' : ''}`}
                       >
                         <div className="text-4xl font-bold mb-2">{shapes[index]}</div>
-                        <div className="text-lg text-center break-words w-full px-2 line-clamp-3 hover:line-clamp-none transition-all">
-                          {option}
-                        </div>
+                        <div className="text-lg text-center">{option}</div>
                         {!canAnswer && isCorrect && (
                           <div className="absolute top-2 right-2 bg-green-500 rounded-full p-1">
                             <Check size={24} />
@@ -751,7 +748,7 @@ const Quiz: React.FC = () => {
               </div>
             )
           ) : (
-            <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="w-full max-w-4xl grid grid-cols-2 gap-4">
               {currentQuestion?.type === 'true_false' ? (
                 ['Vrai', 'Faux'].map((option, index) => {
                   const isSelected = selectedAnswer === index;
@@ -760,7 +757,7 @@ const Quiz: React.FC = () => {
                       key={index}
                       onClick={() => handleSubmitAnswer(index)}
                       disabled={answerSubmitted || !canAnswer}
-                      className={`p-4 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all min-h-[120px]
+                      className={`p-6 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all
                         ${isSelected ? 'bg-[#A00E1A]' : trueFalseColors[index]}
                         ${!canAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
@@ -778,14 +775,11 @@ const Quiz: React.FC = () => {
                       key={index}
                       onClick={() => handleSubmitAnswer(index)}
                       disabled={answerSubmitted || !canAnswer}
-                      className={`${color} text-white p-4 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all min-h-[120px]
-                        ${isSelected ? 'bg-[#A00E1A]' : ''}
-                        ${!canAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`${color} text-white p-6 rounded-lg flex flex-col items-center justify-center shadow-lg relative transition-all
+        ${isSelected ? 'bg-[#A00E1A]' : ''}
+        ${!canAnswer ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      <div className="text-4xl font-bold mb-2">{shapes[index]}</div>
-                      <div className="text-lg text-center break-words w-full px-2 line-clamp-3 hover:line-clamp-none transition-all">
-                        {option}
-                      </div>
+                      <div className="text-4xl font-bold">{shapes[index]}</div>
                     </button>
                   );
                 })

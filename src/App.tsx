@@ -63,10 +63,10 @@ function App() {
                     <Link to="/home" className="hover:text-red-200 transition">Home</Link>
                   </li>
                   <li>
-                    <Link to="/quizzes" className="hover:text-red-200 transition">Mes Quiz</Link>
+                    <Link to="/quizzes" className="hover:text-red-200 transition">My Quizzes</Link>
                   </li>
                   <li>
-                    <Link to="/reports" className="hover:text-red-200 transition">Rapport</Link>
+                    <Link to="/reports" className="hover:text-red-200 transition">Reports</Link>
                   </li>
                 </>
               )}

@@ -230,6 +230,11 @@ def api_generate_quiz_doc():
                     qst["image"]["source"] if qst["image"] else "none"
                 ))
 
+            # Dans la fonction api_generate_quiz_doc, avant le commit
+            print(f"Inserting quiz with ID: {quiz_id}")
+            for qst in questions:
+                print(f"Inserting question: {qst['question']}")
+
             conn.commit()
             return jsonify({"success": True, "quiz_id": quiz_id}), 201
 
@@ -1013,11 +1018,18 @@ def get_game_details(game_id):
 
         # Réponses ouvertes (sans l'hôte)
         cursor.execute('''
-            SELECT DISTINCT a.question_id, u.id as user_id, u.username, a.answer_text, a.is_correct
+            SELECT 
+                a.question_id, 
+                u.id as user_id, 
+                u.username, 
+                a.answer_text
             FROM answers a
             JOIN users u ON a.user_id = u.id
             JOIN questions q ON a.question_id = q.id
-            WHERE a.game_id = ? AND q.type = 'open_question' AND a.user_id != ?
+            WHERE a.game_id = ? 
+            AND q.type = 'open_question' 
+            AND a.user_id != ?
+            ORDER BY a.question_id
         ''', (game_id, game['host_id']))
         open_answers = [dict(row) for row in cursor.fetchall()]
 
@@ -1493,43 +1505,52 @@ def handle_next_question(data):
                             WHERE game_id = ? AND user_id = ?
                         ''', (player['score'], game_id, db_user_id))
 
-                    # Enregistrer les réponses (vérifier d'abord si elles existent)
-                    for q_idx, answer in player['answers'].items():
-                        question = room['questions'][q_idx]
-
-                        cursor.execute('''
-                            SELECT id FROM answers 
-                            WHERE game_id = ? AND question_id = ? AND user_id = ?
-                        ''', (game_id, question['id'], db_user_id))
-                        existing_answer = cursor.fetchone()
-
-                        if not existing_answer:
-                            is_correct = False
-
-                            if question['type'] != 'open_question' and answer != -1:
-                                options = []
-                                if question['type'] == 'true_false':
-                                    options = ['Vrai', 'Faux']
-                                else:
-                                    options = [
-                                        question.get('option_a'),
-                                        question.get('option_b'),
-                                        question.get('option_c'),
-                                        question.get('option_d')
-                                    ]
-                                is_correct = (
-                                    options[answer] == question['correct_answer'])
+                        # Enregistrer les réponses des joueurs
+                        for q_idx, answer in player['answers'].items():
+                            question = room['questions'][q_idx]
 
                             cursor.execute('''
-                                INSERT INTO answers (game_id, question_id, user_id, answer_text, is_correct)
-                                VALUES (?, ?, ?, ?, ?)
-                            ''', (
-                                game_id,
-                                question['id'],
-                                db_user_id,
-                                str(answer) if answer != -1 else 'No answer',
-                                is_correct
-                            ))
+                                SELECT id FROM answers 
+                                WHERE game_id = ? AND question_id = ? AND user_id = ?
+                            ''', (game_id, question['id'], db_user_id))
+                            existing_answer = cursor.fetchone()
+
+                            if not existing_answer:
+                                # Gestion spéciale des questions ouvertes
+                                if question['type'] == 'open_question':
+                                    # Récupérer la réponse textuelle depuis room['open_answers']
+                                    open_answers = room.get(
+                                        'open_answers', {}).get(q_idx, [])
+                                    player_open_answer = next(
+                                        (entry for entry in open_answers if entry['username'] == player['username']), None)
+                                    answer_text = player_open_answer['answer'] if player_open_answer else 'No answer'
+                                    is_correct = None  # pas applicable
+                                else:
+                                    answer_text = str(
+                                        answer) if answer != -1 else 'No answer'
+                                    options = []
+                                    if question['type'] == 'true_false':
+                                        options = ['Vrai', 'Faux']
+                                    else:
+                                        options = [
+                                            question.get('option_a'),
+                                            question.get('option_b'),
+                                            question.get('option_c'),
+                                            question.get('option_d')
+                                        ]
+                                    is_correct = (
+                                        options[answer] == question['correct_answer']) if answer != -1 and answer < len(options) else False
+
+                                cursor.execute('''
+                                    INSERT INTO answers (game_id, question_id, user_id, answer_text, is_correct)
+                                    VALUES (?, ?, ?, ?, ?)
+                                ''', (
+                                    game_id,
+                                    question['id'],
+                                    db_user_id,
+                                    answer_text,
+                                    is_correct
+                                ))
 
             conn.commit()
 

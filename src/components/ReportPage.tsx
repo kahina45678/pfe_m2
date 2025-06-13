@@ -12,7 +12,14 @@ interface Game {
   quiz_title: string;
   player_count: number;
   host_id: number;
-  user_role: string; // 'host' or 'player'
+  user_role: string;
+}
+
+interface OpenAnswer {
+  question_id: number;
+  user_id: number;
+  username: string;
+  answer_text: string;
 }
 
 interface GameDetails {
@@ -21,6 +28,7 @@ interface GameDetails {
     quiz_title: string;
     created_at: string;
     room_code: string;
+    host_id: number;
   };
   players: Array<{
     user_id: number;
@@ -36,13 +44,7 @@ interface GameDetails {
     total_answers: number;
     correct_answer: string;
   }>;
-  open_answers: Array<{
-    question_id: number;
-    user_id: number;
-    username: string;
-    answer_text: string;
-    is_correct: boolean;
-  }>;
+  open_answers: OpenAnswer[];
 }
 
 const COLORS = ['#0088FE', '#FF8042', '#00C49F', '#FFBB28', '#8884D8'];
@@ -88,7 +90,10 @@ const QuestionStats: React.FC<{ question: any }> = ({ question }) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6">
       <h3 className="font-semibold text-lg mb-2">{question.question}</h3>
-      <p className="text-sm text-gray-500 mb-4">Correct answer: {question.correct_answer}</p>
+      {question.type !== 'open_question' && (
+        <p className="text-sm text-gray-500 mb-4">Correct answer: {question.correct_answer}</p>
+      )}
+
 
       <div className="flex flex-col md:flex-row gap-8">
         <div>
@@ -143,34 +148,28 @@ const QuestionStats: React.FC<{ question: any }> = ({ question }) => {
 
 const OpenQuestionStats: React.FC<{
   question: any;
-  answers: Array<{
-    username: string;
-    answer_text: string;
-    is_correct: boolean;
-  }>
+  answers: OpenAnswer[];
 }> = ({ question, answers }) => {
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-      <h3 className="font-semibold text-lg mb-2">{question.question}</h3>
-      <p className="text-sm text-gray-500 mb-4">Correct answer: {question.correct_answer}</p>
+      <h3 className="font-semibold text-lg mb-4">{question.question}</h3>
 
-      <h4 className="font-medium mb-2">Player Answers</h4>
-      <div className="space-y-3">
-        {answers.map((answer, index) => (
-          <div
-            key={index}
-            className={`p-3 rounded-lg border ${answer.is_correct ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}
-          >
-            <div className="flex justify-between items-start">
-              <p className="font-medium">{answer.username}</p>
-              <span className={`px-2 py-1 rounded text-xs ${answer.is_correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                {answer.is_correct ? 'Correct' : 'Incorrect'}
-              </span>
+      <h4 className="font-medium mb-3">Player Responses</h4>
+      {answers.length > 0 ? (
+        <div className="space-y-3">
+          {answers.map((answer, index) => (
+            <div
+              key={index}
+              className="p-3 rounded-lg border border-gray-200 bg-gray-50"
+            >
+              <p className="font-medium text-gray-800">{answer.username}</p>
+              <p className="mt-1 text-gray-700">{answer.answer_text}</p>
             </div>
-            <p className="mt-1 text-gray-700">{answer.answer_text}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-gray-500 italic">No responses recorded for this question.</p>
+      )}
     </div>
   );
 };
@@ -212,30 +211,25 @@ const GameDetailsView: React.FC<{ details: GameDetails; onBack: () => void }> = 
 
       {details.questions.map((question, index) => {
         const isOpen = question.type === 'open_question';
-        const relatedOpenAnswers = details.open_answers.filter(a => a.question_id === question.id);
+        const relatedOpenAnswers = details.open_answers.filter(
+          (a) => Number(a.question_id) === Number(question.id)
+        );
 
         return (
           <div key={question.id} className="mb-6">
             <h4 className="text-lg font-semibold text-gray-800 mb-2">Question {index + 1}</h4>
             {isOpen ? (
-              <OpenQuestionStats
-                question={question}
-                answers={relatedOpenAnswers.map(a => ({
-                  username: a.username,
-                  answer_text: a.answer_text,
-                  is_correct: a.is_correct
-                }))}
-              />
+              <OpenQuestionStats question={question} answers={relatedOpenAnswers} />
             ) : (
               <QuestionStats question={question} />
             )}
           </div>
         );
       })}
+
     </div>
   );
 };
-
 
 const ReportPage: React.FC = () => {
   const { user } = useAuth();
@@ -244,6 +238,7 @@ const ReportPage: React.FC = () => {
   const [games, setGames] = useState<Game[]>([]);
   const [gameDetails, setGameDetails] = useState<GameDetails | null>(null);
   const [loading, setLoading] = useState(false);
+
   const handleDeleteHistory = async () => {
     if (!user || !window.confirm("Are you sure you want to delete all your game history? This action cannot be undone.")) {
       return;
@@ -269,7 +264,6 @@ const ReportPage: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
-    // Charger l'historique des parties
     axios.get(`http://localhost:5000/api/game_history?user_id=${user.id}`)
       .then(response => setGames(response.data.games))
       .catch(error => console.error("Error loading game history:", error));

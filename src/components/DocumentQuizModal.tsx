@@ -31,6 +31,7 @@ const DocumentQuizModal: React.FC<Props> = ({ isOpen, onClose, userId, onQuizCre
 
     setLoading(true);
     setError('');
+    setSuccess(false); // Réinitialiser l'état de succès
 
     const formData = new FormData();
     formData.append('file', file);
@@ -57,6 +58,15 @@ const DocumentQuizModal: React.FC<Props> = ({ isOpen, onClose, userId, onQuizCre
         if (onQuizCreated) {
           onQuizCreated(); // Ceci devrait déclencher le rafraîchissement de la liste
         }
+        setTimeout(() => {
+          setFile(null);
+          setTheme('general');
+          setDifficulty('medium');
+          setCount(5);
+          setQtype('MCQ');
+          setSuccess(false);
+          onClose(); // Fermer le modal
+        }, 2000);
       }
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to create quiz');
