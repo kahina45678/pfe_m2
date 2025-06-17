@@ -23,6 +23,13 @@ const QuizList: React.FC = () => {
   // États pour la notification de traduction
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationSuccess, setTranslationSuccess] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const quizzesPerPage = 5;
+  const indexOfLastQuiz = currentPage * quizzesPerPage;
+  const indexOfFirstQuiz = indexOfLastQuiz - quizzesPerPage;
+  const currentQuizzes = quizzes.slice(indexOfFirstQuiz, indexOfLastQuiz);
+  const totalPages = Math.ceil(quizzes.length / quizzesPerPage);
+
 
   useEffect(() => {
     if (!user) return;
@@ -212,66 +219,90 @@ const QuizList: React.FC = () => {
         </p>
       ) : (
         <ul>
-          {quizzes.map(quiz => (
-            <li key={quiz.id} className="border-b py-2 flex justify-between items-center relative">
-              <div className="flex-1">
-                <Link
-                  to={`/quizzes/edit/${quiz.id}`}
-                  className="text-[#E71722] font-medium hover:text-[#C1121F] hover:underline transition-colors"
-                >
-                  {quiz.title}
-                </Link>
-                <p className="text-gray-500 text-sm">{quiz.description}</p>
-              </div>
+          <motion.ul layout className="grid gap-4">
+            {currentQuizzes.map(quiz => (
+              <motion.li
+                key={quiz.id}
+                whileHover={{ scale: 1.02, y: -3 }}
+                transition={{ type: 'spring', stiffness: 300 }}
+                className="bg-red-50 border border-red-100 rounded-xl p-5 shadow hover:shadow-lg transition-all"
+              >
+                <div className="flex justify-between items-center">
+                  <div className="flex-1">
+                    <Link
+                      to={`/quizzes/edit/${quiz.id}`}
+                      className="text-xl font-bold text-[#E71722] hover:underline"
+                    >
+                      {quiz.title}
+                    </Link>
+                    <p className="text-gray-600 mt-1">{quiz.description}</p>
+                  </div>
 
-              <div className="flex items-center ml-4 space-x-2">
-                <button
-                  onClick={() => handleDeleteQuiz(quiz.id)}
-                  className="text-[#E71722] hover:text-[#C1121F] transition-colors"
-                  title="Delete Quiz"
-                >
-                  <FaTrash />
-                </button>
+                  <div className="flex items-center ml-4 space-x-2">
+                    <button
+                      onClick={() => handleDeleteQuiz(quiz.id)}
+                      className="text-[#E71722] hover:text-[#C1121F]"
+                      title="Delete Quiz"
+                    >
+                      <FaTrash />
+                    </button>
 
-                <div className="relative">
-                  <button
-                    onClick={() => handleToggleMenu(quiz.id)}
-                    className="text-[#E71722] hover:text-[#C1121F] transition-colors"
-                    title="Options"
-                  >
-                    <BsThreeDotsVertical />
-                  </button>
-
-                  {openMenuId === quiz.id && (
-                    <div className="absolute right-0 top-8 bg-white border shadow-md rounded z-10 text-sm w-32">
-                      <Link
-                        to={`/quizzes/edit/${quiz.id}`}
-                        className="block px-4 py-2 hover:bg-gray-100"
-                      >
-                        Edit
-                      </Link>
-                      <Link
-                        to={`/quizzes/duplicate/${quiz.id}`}
-                        className="block px-4 py-2 hover:bg-gray-100"
-                      >
-                        Duplicate
-                      </Link>
+                    <div className="relative">
                       <button
-                        onClick={() => handleTranslate(quiz.id)}
-                        className="block px-4 py-2 hover:bg-gray-100 w-full text-left"
+                        onClick={() => handleToggleMenu(quiz.id)}
+                        className="text-[#E71722] hover:text-[#C1121F]"
+                        title="Options"
                       >
-                        Translate
+                        <BsThreeDotsVertical />
                       </button>
+
+                      {openMenuId === quiz.id && (
+                        <div className="absolute right-0 top-8 bg-white border shadow-md rounded z-10 text-sm w-32">
+                          <Link to={`/quizzes/edit/${quiz.id}`} className="block px-4 py-2 hover:bg-gray-100">
+                            Edit
+                          </Link>
+                          <Link to={`/quizzes/duplicate/${quiz.id}`} className="block px-4 py-2 hover:bg-gray-100">
+                            Duplicate
+                          </Link>
+                          <button
+                            onClick={() => handleTranslate(quiz.id)}
+                            className="block px-4 py-2 hover:bg-gray-100 w-full text-left"
+                          >
+                            Translate
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </li>
-          ))}
+              </motion.li>
+            ))}
+          </motion.ul>
+
         </ul>
       )}
+      <div className="flex justify-center items-center mt-6 space-x-2">
+        <button
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+          className="px-4 py-2 bg-[#E71722] text-white rounded disabled:bg-red-300"
+        >
+          Previous
+        </button>
+        <span className="font-medium text-gray-700">Page {currentPage} of {totalPages}</span>
+        <button
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+          className="px-4 py-2 bg-[#E71722] text-white rounded disabled:bg-red-300"
+        >
+          Next
+        </button>
+      </div>
+
     </div>
+
   );
+
 };
 
 export default QuizList;

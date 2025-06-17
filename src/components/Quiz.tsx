@@ -329,6 +329,35 @@ const Quiz: React.FC = () => {
     }
   }, [isPreparing, currentQuestion, canAnswer]);
 
+  useEffect(() => {
+    const timerAudio = document.getElementById("question-timer-audio") as HTMLAudioElement;
+    const warningAudio = document.getElementById("warning-audio") as HTMLAudioElement;
+
+    if (!timerAudio || !warningAudio) return;
+
+    if (timeLeft > 5) {
+      if (timerAudio.paused) timerAudio.play().catch(() => { });
+      warningAudio.pause();
+      warningAudio.currentTime = 0;
+    } else if (timeLeft <= 5 && timeLeft > 0) {
+      if (!warningAudio.paused) return;
+      warningAudio.play().catch(() => { });
+    } else if (timeLeft === 0) {
+      timerAudio.pause();
+      timerAudio.currentTime = 0;
+      warningAudio.pause();
+      warningAudio.currentTime = 0;
+    }
+
+    return () => {
+      timerAudio.pause();
+      timerAudio.currentTime = 0;
+      warningAudio.pause();
+      warningAudio.currentTime = 0;
+    };
+  }, [timeLeft]);
+
+
   const handleStartGame = () => {
     if (socket && isHost) {
       socket.emit('start_game', { room_code: roomCode });
@@ -518,10 +547,22 @@ const Quiz: React.FC = () => {
           {/* Header */}
           <div className={`bg-gray-100 text-gray-800 p-4 flex justify-between items-center border-b border-gray-300`}>
             <div className="flex items-center space-x-4">
-              <div className={`bg-gray-200 px-4 py-2 rounded-full flex items-center`}>
-                <Clock size={20} className="mr-2" />
-                <span className="font-bold">{timeLeft}s</span>
+              {/* Timer vertical à gauche avec musique */}
+              <div className="fixed top-0 left-20 h-full flex flex-col justify-center items-center px-2 z-50">
+                <audio id="question-timer-audio" src="/sounds/question_timer.mp3" loop preload="auto"></audio>
+                <audio id="warning-audio" src="/sounds/countdown_warning.mp3" preload="auto"></audio>
+
+                <div className="relative w-20 h-80 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="absolute bottom-0 left-0 w-full bg-[#E71722] transition-all duration-1000"
+                    style={{ height: `${(timeLeft / (currentQuestion?.time_limit || 15)) * 100}%` }}
+                  ></div>
+                </div>
+                <span className="mt-2 text-sm font-bold text-gray-700">
+                  {timeLeft}s
+                </span>
               </div>
+
               <div className="text-lg">
                 Question {currentQuestion?.question_number} / {currentQuestion?.total_questions}
               </div>
@@ -806,79 +847,84 @@ const Quiz: React.FC = () => {
     );
   }
 
-  // Game finished state with podium and confetti
-  return (
-    <div className="fixed inset-0 bg-white overflow-y-auto">
-      {showConfetti && (
-        <Confetti
-          width={width}
-          height={height}
-          recycle={false}
-          numberOfPieces={500}
-          gravity={0.3}
-        />
-      )}
 
-      <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8 relative">
-        <div className="text-center mb-8">
-          <h2 className="text-4xl font-bold text-[#E71722] mb-4">Quiz Terminé!</h2>
-          <p className="text-2xl text-gray-600">Voici les résultats finaux</p>
-        </div>
-
-        {isHost ? (
-          // Vue host - avec boutons pour alterner entre podium et scores
-          <>
-            {!showScores ? (
-              <>
-                <Podium players={getRegularPlayers} />
-                <div className="flex space-x-4 mt-8 justify-center">
-                  <button
-                    onClick={() => setShowScores(true)}
-                    className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded transition-colors"
-                  >
-                    Afficher tous les scores
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-3 mb-8">
-                  {getRegularPlayers.map((player, index) => (
-                    <PlayerItem key={player.id} player={player} index={index} />
-                  ))}
-                </div>
-                <div className="flex space-x-4 mt-8 justify-center">
-                  <button
-                    onClick={() => setShowScores(false)}
-                    className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded transition-colors"
-                  >
-                    Afficher le podium
-                  </button>
-                </div>
-              </>
-            )}
-          </>
-        ) : (
-          // Vue joueur - médaille avec classement
-          <div className="flex flex-col items-center justify-center py-8">
-            <PlayerMedal
-              player={getRegularPlayers.find(p => p.id === socket?.id) || null}
-              position={getRegularPlayers.findIndex(p => p.id === socket?.id) + 1}
-            />
-          </div>
+  if (gameState === 'finished') {
+    return (
+      <div className="fixed inset-0 bg-white overflow-y-auto">
+        {isHost && (
+          <audio id="podium-audio" src="/sounds/podium_loop.mp3" loop autoPlay />
+        )}
+        {showConfetti && (
+          <Confetti
+            width={width}
+            height={height}
+            recycle={false}
+            numberOfPieces={500}
+            gravity={0.3}
+          />
         )}
 
-        <div className="flex space-x-4 mt-8 justify-center">
-          <button
-            onClick={handleLeaveGame}
-            className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded transition-colors"
-          >
-            Retour à l'accueil
-          </button>
+        <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md overflow-hidden p-8 relative">
+          <div className="text-center mb-8">
+            <h2 className="text-4xl font-bold text-[#E71722] mb-4">Quiz Terminé!</h2>
+            <p className="text-2xl text-gray-600">Voici les résultats finaux</p>
+          </div>
+
+          {isHost ? (
+            // Vue host - avec boutons pour alterner entre podium et scores
+            <>
+              {!showScores ? (
+                <>
+                  <Podium players={getRegularPlayers} />
+                  <div className="flex space-x-4 mt-8 justify-center">
+                    <button
+                      onClick={() => setShowScores(true)}
+                      className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded transition-colors"
+                    >
+                      Afficher tous les scores
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="space-y-3 mb-8">
+                    {getRegularPlayers.map((player, index) => (
+                      <PlayerItem key={player.id} player={player} index={index} />
+                    ))}
+                  </div>
+                  <div className="flex space-x-4 mt-8 justify-center">
+                    <button
+                      onClick={() => setShowScores(false)}
+                      className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded transition-colors"
+                    >
+                      Afficher le podium
+                    </button>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            // Vue joueur - médaille avec classement
+            <div className="flex flex-col items-center justify-center py-8">
+              <PlayerMedal
+                player={getRegularPlayers.find(p => p.id === socket?.id) || null}
+                position={getRegularPlayers.findIndex(p => p.id === socket?.id) + 1}
+              />
+            </div>
+          )}
+
+          <div className="flex space-x-4 mt-8 justify-center">
+            <button
+              onClick={handleLeaveGame}
+              className="bg-[#E71722] hover:bg-[#C1121F] text-white font-bold py-3 px-6 rounded transition-colors"
+            >
+              Retour à l'accueil
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
 };
 
 export default Quiz;

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import axios from 'axios';
-import { Plus, Trash, Save, ArrowLeft, Clock, Award, Image, X } from 'lucide-react';
+import { Plus, Trash, Save, ArrowLeft, Clock, Award } from 'lucide-react';
 
 interface QuestionImage {
   source: 'unsplash' | 'upload';
@@ -84,20 +84,20 @@ const QuizEditor: React.FC = () => {
             ...q,
             type: q.type,
             image: q.image_url
-                ? {
-                    source: q.image_source || 'upload',
-                    urls: q.image_source === 'unsplash'
-                      ? {
-                          thumb: q.image_url,
-                          regular: q.image_url
-                        }
-                      : undefined,
-                    path: q.image_source !== 'unsplash' ? q.image_url : undefined,
-                    id: q.id.toString()
+              ? {
+                source: q.image_source || 'upload',
+                urls: q.image_source === 'unsplash'
+                  ? {
+                    thumb: q.image_url,
+                    regular: q.image_url
                   }
-                : null
+                  : undefined,
+                path: q.image_source !== 'unsplash' ? q.image_url : undefined,
+                id: q.id.toString()
+              }
+              : null
 
-            
+
           }))
           : [{ ...emptyQuestion }]
       );
@@ -350,7 +350,7 @@ const QuizEditor: React.FC = () => {
             id="title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
             placeholder="Enter quiz title"
             required
           />
@@ -364,7 +364,7 @@ const QuizEditor: React.FC = () => {
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
             placeholder="Enter quiz description"
             rows={3}
           />
@@ -419,14 +419,14 @@ const QuizEditor: React.FC = () => {
               {questions[currentQuestion].image ? (
                 <div className="mb-2">
                   <img
-                      src={
-                        questions[currentQuestion].image?.source === 'unsplash'
-                          ? questions[currentQuestion].image?.urls?.thumb || questions[currentQuestion].image?.path || questions[currentQuestion].image?.url
-                          : questions[currentQuestion].image?.path
-                      }
-                      alt="Selected"
-                      className="rounded w-32 h-20 object-cover mb-2"
-                    />
+                    src={
+                      questions[currentQuestion].image?.source === 'unsplash'
+                        ? questions[currentQuestion].image?.urls?.thumb || questions[currentQuestion].image?.path
+                        : questions[currentQuestion].image?.path
+                    }
+                    alt="Selected"
+                    className="rounded w-64 h-40 object-cover mb-2 transition-transform hover:scale-105 shadow-md"
+                  />
 
                   <button
                     type="button"
@@ -454,18 +454,15 @@ const QuizEditor: React.FC = () => {
                       Search
                     </button>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                  <div className="grid grid-cols-3 gap-4 max-h-64 overflow-y-auto">
                     {imageResults.map((img) => (
                       <img
                         key={img.id}
                         src={img.urls.thumb}
                         alt="Unsplash"
-                        className="rounded cursor-pointer hover:scale-105 transition"
+                        className="rounded cursor-pointer hover:scale-110 transition-transform shadow-md hover:shadow-lg"
                         onClick={() => {
-                          updateQuestion('image', {
-                            ...img,
-                            source: 'unsplash'
-                          });
+                          updateQuestion('image', { ...img, source: 'unsplash' });
                           setImageResults([]);
                           setSearchImage('');
                         }}
@@ -492,7 +489,7 @@ const QuizEditor: React.FC = () => {
               <select
                 value={questions[currentQuestion].type}
                 onChange={(e) => updateQuestion('type', e.target.value as 'qcm' | 'true_false' | 'open_question')}
-                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
                 required
               >
                 <option value="qcm">QCM</option>
@@ -580,7 +577,7 @@ const QuizEditor: React.FC = () => {
                           type="text"
                           value={questions[currentQuestion].option_c || ''}
                           onChange={(e) => updateQuestion('option_c', e.target.value)}
-                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
                           placeholder="Option C"
                           required
                         />
@@ -593,7 +590,7 @@ const QuizEditor: React.FC = () => {
                           type="text"
                           value={questions[currentQuestion].option_d || ''}
                           onChange={(e) => updateQuestion('option_d', e.target.value)}
-                          className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                          className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
                           placeholder="Option D"
                           required
                         />
@@ -609,7 +606,7 @@ const QuizEditor: React.FC = () => {
                   <select
                     value={questions[currentQuestion].correct_answer || ''}
                     onChange={(e) => updateQuestion('correct_answer', e.target.value)}
-                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
                     required={questions[currentQuestion].type === 'qcm' || questions[currentQuestion].type === 'true_false'}
                   >
                     <option value="">Select correct answer</option>
@@ -641,7 +638,7 @@ const QuizEditor: React.FC = () => {
                   type="number"
                   value={questions[currentQuestion].time_limit}
                   onChange={(e) => updateQuestion('time_limit', parseInt(e.target.value))}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
                   min="5"
                   max="60"
                   required
@@ -656,7 +653,7 @@ const QuizEditor: React.FC = () => {
                   type="number"
                   value={questions[currentQuestion].points}
                   onChange={(e) => updateQuestion('points', parseInt(e.target.value))}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  className="bg-gray-50 ring-1 ring-gray-300 rounded w-full py-2 px-3 text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#E71722] transition-shadow"
                   min="1"
                   max="100"
                   required

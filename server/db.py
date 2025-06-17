@@ -270,6 +270,7 @@ def create_quiz(title, description, user_id, questions):
 
 
 def update_quiz(quiz_id, title, description, questions):
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -288,6 +289,9 @@ def update_quiz(quiz_id, title, description, questions):
 
         # Insert new questions
         for q in questions:
+            image_data = q.get('image') or {}
+            image_url = image_data.get('urls', {}).get('regular') if image_data.get(
+                'source') == 'unsplash' else image_data.get('path')
             # Insert the question
             cursor.execute('''
             INSERT INTO questions 

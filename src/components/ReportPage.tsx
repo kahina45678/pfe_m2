@@ -70,7 +70,7 @@ const GameList: React.FC<{ games: Game[]; onSelectGame: (id: number) => void }> 
                 </div>
                 <div className="text-right">
                   <p className="text-sm">{new Date(game.created_at).toLocaleString()}</p>
-                  <p className="text-sm">{game.player_count - 1} players</p>
+                  <p className="text-sm">{game.player_count} players</p>
                 </div>
               </div>
             </li>
@@ -236,22 +236,23 @@ const ReportPage: React.FC = () => {
   const { gameId } = useParams();
   const navigate = useNavigate();
   const [games, setGames] = useState<Game[]>([]);
-  const [gameDetails, setGameDetails] = useState<GameDetails | null>(null);
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedGame, setSelectedGame] = useState<GameDetails | null>(null);
+  const gamesPerPage = 5;
+
+  const indexOfLastGame = currentPage * gamesPerPage;
+  const indexOfFirstGame = indexOfLastGame - gamesPerPage;
+  const currentGames = games.slice(indexOfFirstGame, indexOfLastGame);
+  const totalPages = Math.ceil(games.length / gamesPerPage);
 
   const handleDeleteHistory = async () => {
-    if (!user || !window.confirm("Are you sure you want to delete all your game history? This action cannot be undone.")) {
-      return;
-    }
+    if (!user || !window.confirm("Are you sure you want to delete all your game history? This action cannot be undone.")) return;
 
     try {
       setLoading(true);
       await axios.delete(`http://localhost:5000/api/delete_game_history?user_id=${user.id}`);
       setGames([]);
-      if (gameId) {
-        navigate('/reports');
-        setGameDetails(null);
-      }
       alert("Game history deleted successfully");
     } catch (error) {
       console.error("Error deleting game history:", error);
@@ -261,46 +262,36 @@ const ReportPage: React.FC = () => {
     }
   };
 
+  const handleSelectGame = (id: number) => navigate(`/reports/${id}`);
+
+  const handleBack = () => {
+    setSelectedGame(null);
+    navigate('/reports');
+  };
+
   useEffect(() => {
     if (!user) return;
-
     axios.get(`http://localhost:5000/api/game_history?user_id=${user.id}`)
-      .then(response => setGames(response.data.games))
-      .catch(error => console.error("Error loading game history:", error));
+      .then(res => setGames(res.data.games))
+      .catch(err => console.error("Error loading game history:", err));
   }, [user]);
 
   useEffect(() => {
-    if (gameId) {
-      setLoading(true);
-      axios.get(`http://localhost:5000/api/game_details/${gameId}`)
-        .then(response => {
-          setGameDetails(response.data);
-          setLoading(false);
-        })
-        .catch(error => {
-          console.error("Error loading game details:", error);
-          setLoading(false);
-        });
+    if (!gameId) {
+      setSelectedGame(null);
+      return;
     }
+    axios.get(`http://localhost:5000/api/game_details/${gameId}`)
+      .then(res => setSelectedGame(res.data))
+      .catch(err => console.error("Error loading game details:", err));
   }, [gameId]);
 
-  const handleSelectGame = (id: number) => {
-    navigate(`/reports/${id}`);
-  };
-
-  const handleBackToList = () => {
-    navigate('/reports');
-    setGameDetails(null);
-  };
-
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      {gameDetails ? (
-        <GameDetailsView details={gameDetails} onBack={handleBackToList} />
-      ) : (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-[#E71722]">Game Reports</h1>
+    <div className="max-w-4xl mx-auto p-6">
+      {!selectedGame ? (
+        <>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-[#E71722]">Game Reports</h2>
             {games.length > 0 && (
               <button
                 onClick={handleDeleteHistory}
@@ -311,11 +302,56 @@ const ReportPage: React.FC = () => {
               </button>
             )}
           </div>
-          <GameList games={games} onSelectGame={handleSelectGame} />
-        </div>
+
+          {games.length === 0 ? (
+            <p className="text-gray-600">No games found.</p>
+          ) : (
+            <div className="space-y-4">
+              {currentGames.map((game) => (
+                <div
+                  key={game.id}
+                  className="bg-red-50 border border-red-100 rounded-xl p-5 shadow hover:shadow-lg transition-all cursor-pointer"
+                  onClick={() => handleSelectGame(game.id)}
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-xl font-bold text-[#E71722]">{game.quiz_title}</h3>
+                      <p className="text-gray-600 text-sm">Room: {game.room_code}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-500">{new Date(game.created_at).toLocaleString()}</p>
+                      <p className="text-sm text-gray-500">{game.player_count} players</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex justify-center items-center mt-6 space-x-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  className="px-4 py-2 bg-[#E71722] text-white rounded disabled:bg-red-300"
+                >
+                  Previous
+                </button>
+                <span className="font-medium text-gray-700">Page {currentPage} of {totalPages}</span>
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  className="px-4 py-2 bg-[#E71722] text-white rounded disabled:bg-red-300"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <GameDetailsView details={selectedGame} onBack={handleBack} />
       )}
     </div>
   );
 };
+
 
 export default ReportPage;

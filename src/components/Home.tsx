@@ -15,10 +15,10 @@ interface Quiz {
   description: string;
 }
 
-const FeatureCard: React.FC<{ 
-  icon: React.ReactNode; 
-  title: string; 
-  description: string; 
+const FeatureCard: React.FC<{
+  icon: React.ReactNode;
+  title: string;
+  description: string;
   buttonText: string;
   onClick: () => void;
 }> = ({ icon, title, description, buttonText, onClick }) => {
@@ -146,7 +146,7 @@ const Home: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Hero Section */}
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -155,10 +155,10 @@ const Home: React.FC = () => {
         {/* Floating decorative elements */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-red-100 rounded-full opacity-20 -mr-16 -mt-16"></div>
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-red-200 rounded-full opacity-20 -ml-12 -mb-12"></div>
-        
+
         <div className="relative z-10">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-            <motion.h2 
+            <motion.h2
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2 }}
@@ -166,7 +166,7 @@ const Home: React.FC = () => {
             >
               Welcome back, <span className="text-red-600">{user?.username}</span>!
             </motion.h2>
-            
+
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
@@ -180,7 +180,7 @@ const Home: React.FC = () => {
 
           <AnimatePresence>
             {error && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -194,7 +194,7 @@ const Home: React.FC = () => {
 
           <div className="grid md:grid-cols-2 gap-8">
             {/* Host Quiz Section */}
-            <motion.div 
+            <motion.div
               whileHover={{ y: -5 }}
               className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-lg border border-red-100"
             >
@@ -233,12 +233,12 @@ const Home: React.FC = () => {
                   {loading ? 'Creating...' : 'Create Room'}
                 </motion.button>
 
-               
+
               </div>
             </motion.div>
 
             {/* Create Quiz Section */}
-            <motion.div 
+            <motion.div
               whileHover={{ y: -5 }}
               className="bg-gradient-to-br from-red-50 to-red-100 p-6 rounded-lg border border-red-100"
             >
@@ -293,10 +293,10 @@ const Home: React.FC = () => {
           onClick={() => navigate('/quizzes')}
         />
 
-        
+
 
         <FeatureCard
-          icon={<FileText size={24} />}  
+          icon={<FileText size={24} />}
           title="Game Reports"
           description="View detailed statistics and analysis of your past games."
           buttonText="View Reports"
@@ -307,27 +307,27 @@ const Home: React.FC = () => {
       {/* Join Room Modal */}
       <AnimatePresence>
         {showJoinModal && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
             onClick={() => setShowJoinModal(false)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
               className="bg-white p-8 rounded-xl shadow-xl max-w-md w-full relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <button 
+              <button
                 onClick={() => setShowJoinModal(false)}
                 className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
               >
-               
+
               </button>
-              
+
               <h3 className="text-2xl font-semibold text-[#E71722] mb-6 text-center">Join a Quiz Room</h3>
               <div className="space-y-4">
                 <div>

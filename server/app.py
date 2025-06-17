@@ -981,7 +981,7 @@ def get_game_details(game_id):
             return jsonify({"error": "Game not found"}), 404
         game = dict(game)
 
-        # Questions du quiz (sans doublons)
+        # Questions du quiz
         cursor.execute('''
             SELECT DISTINCT q.id, q.question, q.type, q.correct_answer
             FROM questions q
@@ -989,17 +989,17 @@ def get_game_details(game_id):
         ''', (game['quiz_id'],))
         questions = [dict(row) for row in cursor.fetchall()]
 
-        # Joueurs (sans l'hôte)
+        # Joueurs (host déjà exclu à l’enregistrement dans game_players)
         cursor.execute('''
             SELECT DISTINCT u.id as user_id, u.username, gp.score
             FROM game_players gp
             JOIN users u ON gp.user_id = u.id
-            WHERE gp.game_id = ? AND u.id != ?
+            WHERE gp.game_id = ?
             ORDER BY gp.score DESC
-        ''', (game_id, game['host_id']))
+        ''', (game_id,))
         players = [dict(row) for row in cursor.fetchall()]
 
-        # Statistiques des réponses
+        # Statistiques des réponses par question
         for question in questions:
             cursor.execute('''
                 SELECT 
@@ -1007,8 +1007,8 @@ def get_game_details(game_id):
                     SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END) as correct_count,
                     SUM(CASE WHEN NOT a.is_correct THEN 1 ELSE 0 END) as incorrect_count
                 FROM answers a
-                WHERE a.game_id = ? AND a.question_id = ? AND a.user_id != ?
-            ''', (game_id, question['id'], game['host_id']))
+                WHERE a.game_id = ? AND a.question_id = ?
+            ''', (game_id, question['id']))
             stats = cursor.fetchone()
             question.update({
                 'correct_count': stats['correct_count'] or 0,
@@ -1016,7 +1016,7 @@ def get_game_details(game_id):
                 'total_answers': stats['total_answers'] or 0
             })
 
-        # Réponses ouvertes (sans l'hôte)
+        # Réponses ouvertes
         cursor.execute('''
             SELECT 
                 a.question_id, 
@@ -1027,10 +1027,9 @@ def get_game_details(game_id):
             JOIN users u ON a.user_id = u.id
             JOIN questions q ON a.question_id = q.id
             WHERE a.game_id = ? 
-            AND q.type = 'open_question' 
-            AND a.user_id != ?
+              AND q.type = 'open_question'
             ORDER BY a.question_id
-        ''', (game_id, game['host_id']))
+        ''', (game_id,))
         open_answers = [dict(row) for row in cursor.fetchall()]
 
         return jsonify({
@@ -1045,6 +1044,7 @@ def get_game_details(game_id):
             "questions": questions,
             "open_answers": open_answers
         })
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -1176,6 +1176,8 @@ def send_question(room_code):
 
     timers[room_code] = socketio.start_background_task(
         start_timer, room_code, question.get('time_limit', 15))
+
+    room['question_start_time'] = time.time()
 
 
 # Socket events
@@ -1320,13 +1322,13 @@ def handle_join_room(data):
         finally:
             conn.close()
 
-    # Ajouter le joueur à la liste en mémoire
-    active_rooms[room_code]['players'][user_id] = {
-        'username': username,
-        'score': 0,
-        'answers': {},
-        'is_host': is_host
-    }
+    if not is_host:
+        active_rooms[room_code]['players'][user_id] = {
+            'username': username,
+            'score': 0,
+            'answers': {},
+            'is_host': False
+        }
 
     # Mettre à jour la liste des joueurs
     players_list = [
@@ -1398,9 +1400,20 @@ def handle_submit_answer(data):
 
     # Vérifier si la réponse est correcte
     is_correct = options[answer] == question['correct_answer']
-    points = question.get('points', 10) if is_correct else 0
+
+    points = 0
 
     if is_correct:
+        base_points = question.get('points', 10)
+        total_time = question.get('time_limit', 15)
+        time_used = time.time() - room.get('question_start_time', time.time())
+        time_left = max(0, total_time - time_used)
+
+        # Appliquer un bonus basé sur la vitesse de réponse
+        bonus_coeff = 1.0  # Tu peux ajuster cette valeur
+        bonus_multiplier = 1 + (time_left / total_time) * bonus_coeff
+        points = round(base_points * bonus_multiplier)
+
         room['players'][user_id]['score'] += points
 
     # Envoyer le résultat au joueur
