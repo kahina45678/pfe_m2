@@ -156,6 +156,8 @@ const Quiz: React.FC = () => {
   const [showOpenAnswers, setShowOpenAnswers] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [preparationCountdown, setPreparationCountdown] = useState(5);
+  const [nextQuestion, setNextQuestion] = useState<Question | null>(null);
+
   const username = location.state?.username || user?.username;
 
   const qcmColors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500'];
@@ -244,7 +246,15 @@ const Quiz: React.FC = () => {
       setAnswerSubmitted(false);
       setSelectedAnswer(null);
       setOpenAnswer('');
+      setNextQuestion(null); // reset
+
+      // Anticiper la prochaine question (à index `question_number - 1`)
+      const targetIndex = data.question_number - 1;
+      if (Array.isArray(data.questions) && data.questions[targetIndex]) {
+        setNextQuestion(data.questions[targetIndex]);
+      }
     });
+
     newSocket.on('new_question', (data) => {
       setIsPreparing(false);
       setCurrentQuestion(data);
@@ -514,29 +524,35 @@ const Quiz: React.FC = () => {
     );
   }
 
-  if (isPreparing) {
+  if (isPreparing && currentQuestion) {
     return (
-      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center">
-        <div className="text-center max-w-2xl p-8">
+      <div className="fixed inset-0 bg-white flex flex-col items-center justify-center p-8">
+        <div className="text-center max-w-3xl w-full">
           <h2 className="text-4xl font-bold text-[#E71722] mb-6">
-            {currentQuestionIndex === 0 ?
-              "Le quiz va commencer !" :
-              `Préparez-vous pour la question ${currentQuestionIndex + 1}`}
+            {currentQuestionIndex === 0
+              ? "Le quiz va commencer !"
+              : `Préparez-vous pour la question ${currentQuestionIndex + 1}`}
           </h2>
-          <div className="flex justify-center mb-8">
-            <div className="text-6xl font-bold text-[#E71722] animate-pulse">
-              {preparationCountdown}
+
+          <div className="mb-6">
+            <div className="bg-gray-100 text-gray-800 p-6 rounded-lg shadow-lg">
+              <h3 className="text-2xl font-semibold text-center">{nextQuestion?.question || "Chargement..."}</h3>
+
             </div>
           </div>
+
+
+          <div className="text-6xl font-bold text-[#E71722] animate-pulse mb-4">
+            {preparationCountdown}
+          </div>
           <p className="text-xl text-gray-600">
-            {currentQuestionIndex === 0 ?
-              "La première question arrive bientôt..." :
-              "La question suivante arrive dans quelques secondes..."}
+            La question arrive dans quelques secondes...
           </p>
         </div>
       </div>
     );
   }
+
 
   if (gameState === 'playing') {
     if (isHost) {
@@ -548,20 +564,22 @@ const Quiz: React.FC = () => {
           <div className={`bg-gray-100 text-gray-800 p-4 flex justify-between items-center border-b border-gray-300`}>
             <div className="flex items-center space-x-4">
               {/* Timer vertical à gauche avec musique */}
-              <div className="fixed top-0 left-20 h-full flex flex-col justify-center items-center px-2 z-50">
+              <div className="fixed top-0 left-4 sm:left-8 md:left-20 h-full flex flex-col justify-center items-center px-2 z-50">
                 <audio id="question-timer-audio" src="/sounds/question_timer.mp3" loop preload="auto"></audio>
                 <audio id="warning-audio" src="/sounds/countdown_warning.mp3" preload="auto"></audio>
 
-                <div className="relative w-20 h-80 bg-gray-200 rounded-full overflow-hidden">
+                <div className="relative w-8 sm:w-12 md:w-16 lg:w-20 h-64 sm:h-72 md:h-80 lg:h-96 bg-gray-200 rounded-full overflow-hidden">
                   <div
                     className="absolute bottom-0 left-0 w-full bg-[#E71722] transition-all duration-1000"
                     style={{ height: `${(timeLeft / (currentQuestion?.time_limit || 15)) * 100}%` }}
                   ></div>
                 </div>
-                <span className="mt-2 text-sm font-bold text-gray-700">
+
+                <span className="mt-2 text-xs sm:text-sm md:text-base font-bold text-gray-700">
                   {timeLeft}s
                 </span>
               </div>
+
 
               <div className="text-lg">
                 Question {currentQuestion?.question_number} / {currentQuestion?.total_questions}

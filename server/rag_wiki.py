@@ -6,9 +6,11 @@ from langchain.llms import Ollama
 
 wikipedia.set_lang("en")
 
+
 def load_mistral_from_ollama():
     print("[INFO] Loading Mistral model from Ollama...")
     return Ollama(model="mistral")
+
 
 llm = load_mistral_from_ollama()
 
@@ -51,6 +53,7 @@ Context:
 """
 }
 
+
 def fetch_wikipedia_content(subject: str) -> str:
     print(f"[INFO] Fetching Wikipedia content for: {subject}")
     try:
@@ -59,15 +62,15 @@ def fetch_wikipedia_content(subject: str) -> str:
             print(f"[ERROR] No search results found for: {subject}")
             return ""
         print(f"[INFO] Wikipedia search results: {search_results}")
-        
-        
+
         chosen_title = search_results[0]
         print(f"[INFO] Choosing first result: {chosen_title}")
         page = wikipedia.page(title=chosen_title, auto_suggest=False)
         print(f"[INFO] Wikipedia page found: {page.title}")
         return page.content
     except wikipedia.exceptions.DisambiguationError as e:
-        print(f"[WARN] Disambiguation error for '{subject}'. Selecting first option: {e.options[0]}")
+        print(
+            f"[WARN] Disambiguation error for '{subject}'. Selecting first option: {e.options[0]}")
         try:
             page = wikipedia.page(e.options[0])
             print(f"[INFO] Wikipedia page found (fallback): {page.title}")
@@ -79,24 +82,27 @@ def fetch_wikipedia_content(subject: str) -> str:
     return ""
 
 
-
 def split_content_into_documents(raw_text: str):
     print("[INFO] Splitting Wikipedia content into documents...")
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=200)
     documents = splitter.create_documents([raw_text])
     print(f"[INFO] Split into {len(documents)} document(s).")
     return documents
 
+
 def build_prompt_template(question_type: str):
-    print(f"[INFO] Building prompt template for question type: {question_type}")
+    print(
+        f"[INFO] Building prompt template for question type: {question_type}")
     if question_type not in prompt_templates:
         raise ValueError(f"Unknown question_type: {question_type}")
     template = prompt_templates[question_type]
     print(f"[INFO] Prompt template for {question_type}: {template}")
     return PromptTemplate.from_template(template)
 
+
 def generate_quiz_from_wikipedia(subject: str, difficulty: str = "medium", nb_qst: int = 5,
-                                  question_type: str = "MCQ") -> str:
+                                 question_type: str = "MCQ") -> str:
     print(f"[INFO] Starting quiz generation for '{subject}'...")
     print(f"[INFO] Generating quiz on '{subject}' using Mistral via Ollama...")
 
@@ -114,21 +120,30 @@ def generate_quiz_from_wikipedia(subject: str, difficulty: str = "medium", nb_qs
 
     print(f"[INFO] Combined context into {len(context.split())} words.")
 
+    question_type = question_type.lower()
+    type_mapping = {
+        "mcq": "MCQ",
+        "true_false": "TrueFalse",
+        "open": "OpenEnded"
+    }
+    question_type = type_mapping.get(question_type, question_type)
+
     prompt_template = build_prompt_template(question_type)
 
-    prompt_preview = prompt_template.format(subject=subject, difficulty=difficulty, nb_qst=nb_qst, context=context)
-    print(f"\n[DEBUG] --- FULL PROMPT ---\n{prompt_preview}\n[DEBUG] --- END PROMPT ---\n")
+    prompt_preview = prompt_template.format(
+        subject=subject, difficulty=difficulty, nb_qst=nb_qst, context=context)
+    print(
+        f"\n[DEBUG] --- FULL PROMPT ---\n{prompt_preview}\n[DEBUG] --- END PROMPT ---\n")
 
     print(f"[INFO] Preparing to generate quiz with {nb_qst} questions.")
     chain = LLMChain(llm=llm, prompt=prompt_template)
 
     try:
         print("[INFO] Running the chain...")
-        result = chain.run(subject=subject, difficulty=difficulty, nb_qst=nb_qst, context=context)
+        result = chain.run(subject=subject, difficulty=difficulty,
+                           nb_qst=nb_qst, context=context)
         print("[INFO] Quiz generated successfully.")
         return result
     except Exception as e:
         print(f"[ERROR] Quiz generation failed: {e}")
         return f"❌ Quiz generation failed: {e}"
-
-

@@ -269,6 +269,17 @@ def create_quiz(title, description, user_id, questions):
         conn.close()
 
 
+def extract_image_info(q):
+    image = q.get('image')
+    if not image:
+        return None, "none"
+    if image.get('source') == 'unsplash':
+        return image.get('urls', {}).get('regular'), "unsplash"
+    elif image.get('source') == 'upload':
+        return image.get('path'), "upload"
+    return None, "none"
+
+
 def update_quiz(quiz_id, title, description, questions):
 
     conn = get_db_connection()
@@ -289,41 +300,41 @@ def update_quiz(quiz_id, title, description, questions):
 
         # Insert new questions
         for q in questions:
-            image_data = q.get('image') or {}
-            image_url = image_data.get('urls', {}).get('regular') if image_data.get(
-                'source') == 'unsplash' else image_data.get('path')
-            # Insert the question
+            option_a = q.get('option_a')
+            option_b = q.get('option_b')
+            option_c = q.get('option_c') if q['type'] == 'qcm' else None
+            option_d = q.get('option_d') if q['type'] == 'qcm' else None
+            image_url, image_source = extract_image_info(q)
+
             cursor.execute('''
-            INSERT INTO questions 
-            (quiz_id, question, option_a, option_b, option_c, option_d, 
-             correct_answer, time_limit, points, type, image_url, image_source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO questions 
+                (quiz_id, question, option_a, option_b, option_c, option_d, 
+                correct_answer, time_limit, points, type, image_url, image_source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 quiz_id,
                 q['question'],
-                q.get('option_a'),
-                q.get('option_b'),
-                q.get('option_c') if q['type'] == 'qcm' else None,
-                q.get('option_d') if q['type'] == 'qcm' else None,
+                option_a,
+                option_b,
+                option_c,
+                option_d,
                 q.get('correct_answer'),
                 q.get('time_limit', 15),
                 q.get('points', 10),
                 q['type'],
-                q.get('image', {}).get('urls', {}).get('regular') if q.get('image', {}).get(
-                    'source') == 'unsplash' else q.get('image', {}).get('path'),
-                q.get('image', {}).get('source', 'none')
+                image_url,
+                image_source
             ))
 
             question_id = cursor.lastrowid
 
-            # Si l'image vient d'Unsplash, stocker les métadonnées
-            if q.get('image', {}).get('source') == 'unsplash':
+            if image_source == 'unsplash':
                 unsplash_data = q.get('image', {})
                 try:
                     cursor.execute('''
-                    INSERT INTO unsplash_photos 
-                    (id, question_id, regular_url, thumb_url, author_name, author_url)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO unsplash_photos 
+                        (id, question_id, regular_url, thumb_url, author_name, author_url)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     ''', (
                         unsplash_data.get('id'),
                         question_id,

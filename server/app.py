@@ -14,13 +14,13 @@ import qrcode
 import os
 from urllib.parse import urlparse
 import io
-import tempfile
 from dotenv import load_dotenv
 import base64
 from threading import Timer
 from easyocr import Reader
 from io import BytesIO
 from PIL import Image
+import tempfile
 from db import (
     init_db, get_quizzes_by_user, get_quiz_by_id, create_quiz, update_quiz,
     delete_quiz, create_room, get_room_by_code, save_score, get_leaderboard,
@@ -85,67 +85,90 @@ def api_generate_quiz_doc():
     if not file.filename.lower().endswith('.pdf'):
         return jsonify({"error": "File must be a PDF"}), 400
 
-    # Initialisation des variables
-    temp_path = None
-    retriever = None
+    # Sécuriser le nom du fichier et sauvegarder temporairement
+    filename = secure_filename(file.filename)
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, filename)
+    file.save(temp_path)
 
     try:
-        # Créer un répertoire temporaire dédié
-        temp_dir = os.path.join(tempfile.gettempdir(), 'quizmaster_uploads')
-        os.makedirs(temp_dir, exist_ok=True)  # Crée le dossier si inexistant
-
-        # Sécuriser le nom du fichier et créer le chemin complet
-        filename = secure_filename(file.filename)
-        temp_path = os.path.normpath(os.path.join(temp_dir, filename))
-
-        # Sauvegarder le fichier
-        file.save(temp_path)
-
-        # Récupérer les autres paramètres
+        # Récupérer les autres paramètres du formulaire
         data = request.form
-        print('Request received:', data)
+        print('req recue', data)
 
         subject = data.get("theme", "general")
         difficulty = data.get("difficulty", "medium")
         nb_qst = int(data.get("count", 5))
         qtype = data.get("qtype", "MCQ")
+        if qtype == "Free Text":
+            qtype = "Open"
 
-        # Initialiser le vectorstore
+        # Initialiser le vectorstore avec le fichier PDF
         retriever = init_vectorstore(temp_path)
+
+        # Mapper vers les types attendus par generate_quiz()
+        llm_qtype_map = {
+            "MCQ": "MCQ",
+            "true_false": "True/False",
+            "Open": "Open",
+        }
+
+        llm_qtype = llm_qtype_map.get(qtype)
+        if not llm_qtype:
+            return jsonify({"error": f"Unsupported question type for LLM: {qtype}"}), 400
 
         # Générer le quiz
         quiz = generate_quiz(difficulty, subject, nb_qst,
-                             qtype, retriever, llm)
-        print("Raw quiz results:", quiz)
+                             llm_qtype, retriever, llm)
 
-        # Traitement des questions
+        print("resultats quiz", quiz)
+
+        # Supprimer le fichier temporaire
+        os.remove(temp_path)
+        print("resultats quiz", quiz)
+
+        print("🧠 Contenu brut généré par le modèle :\n", quiz)
         questions = []
 
+        # Choix de la regex selon qtype
         if qtype == "MCQ":
             pattern = re.compile(r"""
-                \s*(\d+)[\.\)]\s*                        # Numéro de question
-                (?:Question:)?\s*(.*?)\n                 # Énoncé
-                (?:\s{6,}.+\n)*                          # Lignes supplémentaires
-                \s*A\)\s+((?:.+\n)+?)                    # Option A
-                \s*B\)\s+((?:.+\n)+?)                    # Option B
-                \s*C\)\s+((?:.+\n)+?)                    # Option C
-                \s*D\)\s+((?:.+\n)+?)                    # Option D
-                \s*Answers?:\s*(?:\(|\[)?([ABCD])(?:\)|\])?  # Réponse
-            """, re.VERBOSE)
+            \s*(\d+)[\.\)]\s*                        # Numéro de question : "3." ou "3)"
+            (?:Question:)?\s*(.*?)\n                 # Énoncé (première ligne)
+            (?:\s{6,}.+\n)*                          # Lignes supplémentaires de l’énoncé (indentées)
+            \s*A\)\s+((?:.+\n)+?)                    # Option A (multi-lignes)
+            \s*B\)\s+((?:.+\n)+?)                    # Option B (multi-lignes)
+            \s*C\)\s+((?:.+\n)+?)                    # Option C (multi-lignes)
+            \s*D\)\s+((?:.+\n)+?)                    # Option D (multi-lignes)
+            \s*Answers?:\s*(?:\(|\[)?([ABCD])(?:\)|\])?  # Réponse
+        """, re.VERBOSE)
+
+            print("🔍 Regex MCQ utilisée:", pattern.pattern)
 
             for match in pattern.finditer(quiz):
+                question_text = match.group(2).strip()
+                options = [match.group(i).strip() for i in range(3, 7)]
+                correct = match.group(7).strip()
+                print(f"📌 MCQ détectée: {question_text}")
+                print(f"🔸 Options: {options} | ✅ Réponse: {correct}")
+
                 questions.append({
-                    "question": match.group(2).strip(),
-                    "propositions": [match.group(i).strip() for i in range(3, 7)],
-                    "correct_answer": match.group(7).strip(),
+                    "question": question_text,
+                    "propositions": options,
+                    "correct_answer": correct,
                     "image": None,
                     "type": "qcm"
                 })
 
         elif qtype == "true_false":
             pattern = re.compile(
-                r"\d+\)\s*(.+?)\nAnswer:\s*(True|False)", re.IGNORECASE)
+                r"Statement:\s*(.+?)\s*Answer:\s*(True|False)", re.IGNORECASE | re.DOTALL)
+
+            print("🔍 Regex TrueFalse utilisée:", pattern.pattern)
+
             for match in pattern.finditer(quiz):
+                print(
+                    f"📌 TF détectée: {match.group(1).strip()} ✅ Réponse: {match.group(2).capitalize()}")
                 questions.append({
                     "question": match.group(1).strip(),
                     "propositions": ["True", "False"],
@@ -155,8 +178,16 @@ def api_generate_quiz_doc():
                 })
 
         elif qtype == "Open":
-            pattern = re.compile(r"\d+\)\s*(.+?)\nAnswer:\s*(.+)", re.DOTALL)
+
+            pattern = re.compile(
+                r"(?:^\s*\d+\.\s*|^Q(?:uestion)?:\s*)(.+?)\nAnswer:\s*(.+?)(?=\n(?:\d+\.|Q(?:uestion)?\:)|\Z)",
+                re.DOTALL | re.IGNORECASE | re.MULTILINE
+            )
+
+            print("🔍 Regex Open utilisée:", pattern.pattern)
+
             for match in pattern.finditer(quiz):
+                print(f"📌 Question ouverte: {match.group(1).strip()}")
                 questions.append({
                     "question": match.group(1).strip(),
                     "propositions": [],
@@ -164,28 +195,47 @@ def api_generate_quiz_doc():
                     "type": "open_question"
                 })
 
+        else:
+            logging.error(f"❌ Type de question non supporté : {qtype}")
+            return jsonify({"error": f"Unsupported question type: {qtype}"}), 400
+
         if not questions:
+            logging.error(
+                "❌ Aucune question valide trouvée dans le texte généré")
             return jsonify({"error": "Failed to parse questions from model response"}), 500
 
-        # Enrichir avec images
+        # Enrichir les questions avec images
         for qst in questions:
             try:
-                mot_cle = extract_kw(kb, qst['question']) or subject
+                txt = qst['question']
+                print(f"🔎 Extraction mot-clé pour : {txt}")
+                mot_cle = extract_kw(kb, txt)
+                print(f"🧠 Mot-clé extrait : {mot_cle}")
+
+                if not mot_cle:
+                    logging.warning(
+                        f"⚠️ Mot-clé vide pour la question : {txt}")
+                    mot_cle = subject
+
+                print(f"🖼️ Recherche d'images avec : {mot_cle}")
                 images = search_and_display_images(mot_cle)
-                if images:
-                    qst["image"] = {
-                        "url": filtrer(images),
-                        "source": "unsplash"
-                    }
+                print(f"📸 Images trouvées : {images}")
+                img_url = filtrer(images) if images else None
+                qst["image"] = {
+                    "url": img_url,
+                    "source": "unsplash"
+                } if img_url else None
+
             except Exception as e:
-                logging.error(f"Image processing error: {str(e)}")
+                logging.exception(
+                    f"⚠️ Erreur lors du traitement image/mot-clé pour : {txt}")
                 qst["image"] = None
 
         # Sauvegarde en base
-        conn = None
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
+            print("✅ Connexion à la base de données établie")
 
             title = f"Quiz on {subject.capitalize()} ({difficulty.capitalize()})"
             description = f"Auto-generated quiz about {subject}."
@@ -197,20 +247,28 @@ def api_generate_quiz_doc():
             ''', (title, description, user_id))
 
             quiz_id = cursor.lastrowid
+            print(f"🆔 Quiz inséré avec ID : {quiz_id}")
 
             for qst in questions:
-                props = qst["propositions"]
-                correct = qst["correct_answer"]
+                propositions = qst["propositions"]
+                option_a = propositions[0] if len(propositions) > 0 else None
+                option_b = propositions[1] if len(propositions) > 1 else None
+                option_c = propositions[2] if len(propositions) > 2 else None
+                option_d = propositions[3] if len(propositions) > 3 else None
 
                 if qst["type"] == "qcm":
+                    correct_letter = qst["correct_answer"]
                     letter_to_index = {"A": 0, "B": 1, "C": 2, "D": 3}
-                    idx = letter_to_index.get(correct.upper(), None)
-                    correct_text = props[idx] if idx is not None and idx < len(
-                        props) else correct
+                    idx = letter_to_index.get(correct_letter.upper(), None)
+                    correct_text = propositions[idx] if idx is not None and idx < len(
+                        propositions) else correct_letter
                 elif qst["type"] == "true_false":
-                    correct_text = "Vrai" if correct.lower() == "true" else "Faux"
+                    correct_text = "Vrai" if qst["correct_answer"].lower(
+                    ) == "true" else "Faux"
                 else:
-                    correct_text = correct
+                    correct_text = None
+
+                print(f"📝 Insertion question: {qst['question']}")
 
                 cursor.execute('''
                     INSERT INTO questions (
@@ -220,48 +278,39 @@ def api_generate_quiz_doc():
                 ''', (
                     quiz_id,
                     qst["question"],
-                    props[0] if len(props) > 0 else None,
-                    props[1] if len(props) > 1 else None,
-                    props[2] if len(props) > 2 else None,
-                    props[3] if len(props) > 3 else None,
+                    option_a,
+                    option_b,
+                    option_c,
+                    option_d,
                     correct_text,
                     qst["type"],
                     qst["image"]["url"] if qst["image"] else None,
                     qst["image"]["source"] if qst["image"] else "none"
                 ))
 
-            # Dans la fonction api_generate_quiz_doc, avant le commit
-            print(f"Inserting quiz with ID: {quiz_id}")
-            for qst in questions:
-                print(f"Inserting question: {qst['question']}")
-
             conn.commit()
-            return jsonify({"success": True, "quiz_id": quiz_id}), 201
+            conn.close()
+            print("✅ Quiz et questions enregistrés avec succès")
 
         except Exception as db_err:
-            logging.exception("Database error")
-            if conn:
-                conn.rollback()
+            logging.exception("❌ Erreur lors de l'enregistrement en base")
             return jsonify({"error": "Database error"}), 500
 
         finally:
-            if conn:
-                conn.close()
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+        return jsonify({"success": True, "quiz_id": quiz_id}), 201
 
     except Exception as e:
-        logging.exception("Unexpected error during quiz generation")
+        logging.exception("❌ Erreur inattendue pendant la génération du quiz")
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+
         return jsonify({
             "error": "Failed to generate quiz",
             "details": str(e)
         }), 500
-
-    finally:
-        # Nettoyage garantie du fichier temporaire
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception as e:
-                logging.error(f"Failed to delete temp file: {str(e)}")
 
 
 @app.route('/api/quizzes/ai', methods=['POST'])
@@ -318,10 +367,12 @@ def api_generate_quiz():
                 })
 
         elif qtype == "true_false":
+
             pattern = re.compile(
-                r"\d+\)\s*(.+?)\nAnswer:\s*(True|False)",
-                re.IGNORECASE
+                r"(?:^\s*\d+\.\s*\(True/False\)\s*(.+?)|^\s*\[\s*(.+?)\s*\]\s*\(True/False\))\s*Answer:\s*(True|False)",
+                re.IGNORECASE | re.MULTILINE | re.DOTALL
             )
+
             print("🔍 Regex TrueFalse utilisée:", pattern.pattern)
 
             for match in pattern.finditer(quiz):
@@ -337,9 +388,10 @@ def api_generate_quiz():
 
         elif qtype == "Open":
             pattern = re.compile(
-                r"\d+\)\s*(.+?)\nAnswer:\s*(.+)",
-                re.DOTALL
+                r"^\s*(?:Q:|\d+\.\s*)(.+?)(?:\n\s*Answer:\s*(.+?))?(?=\n\s*(?:Q:|\d+\.)|\Z)",
+                re.DOTALL | re.MULTILINE
             )
+
             print("🔍 Regex Open utilisée:", pattern.pattern)
 
             for match in pattern.finditer(quiz):
@@ -424,7 +476,7 @@ def api_generate_quiz():
                     correct_text = "Vrai" if qst["correct_answer"].lower(
                     ) == "true" else "Faux"
                 else:
-                    correct_text = qst["correct_answer"]
+                    correct_text = None
 
                 print(f"📝 Insertion question: {qst['question']}")
 
@@ -582,7 +634,6 @@ def moteur_recherche():
             mot_ascii = convertir_ascii(liste_mots[i])
             if not binary_search(mots, mot_ascii):
                 correction = correction_mot(liste_mots[i])
-                # Correction: utilisation de la variable 'correction'
                 liste_mots[i] = correction
         search_text = " ".join(liste_mots)
 
@@ -624,71 +675,59 @@ def moteur_recherche():
         print("🛠️ SQL:", query)
         print("📦 Params:", params)
 
-        # Exécution de la requête
+        # Exécution de la requête SQL
         conn = sqlite3.connect("quiz.db")
         cursor = conn.cursor()
         cursor.execute(query, params)
         rows = cursor.fetchall()
 
-        # Formatage des résultats
-        results = [
-            {"id": row[0], "title": row[1], "description": row[2]}
-            for row in rows
-        ]
+        # Résultats initiaux de la requête SQL
+        results = [{"id": row[0], "title": row[1], "description": row[2]}
+                   for row in rows]
+        found_ids = {r["id"] for r in results}  # Pour éviter les doublons
 
-        # Si aucun résultat, recherche étendue avec BERT
-        if not results:
-            print("🔍 Aucun résultat trouvé, récupération de tous les quiz...")
-            cursor.execute("SELECT id, title, description FROM quizzes")
-            rows = cursor.fetchall()
-            traiter = []
-            found_ids = set()
+        # Recherche sémantique complémentaire avec BERT
+        print("🔍 Recherche sémantique complémentaire avec BERT...")
+        cursor.execute(
+            "SELECT id, title, description FROM quizzes WHERE user_id = ?", (user_id,))
+        all_quizzes = cursor.fetchall()
 
-            for row in rows:
-                quiz_id, title, description = row
-                cursor.execute(
-                    "SELECT id, question FROM questions WHERE quiz_id = ?",
-                    (quiz_id,)
-                )
-                questions = cursor.fetchall()
-                questions_formatted = [
-                    {"id": q[0], "question": q[1]} for q in questions
-                ]
+        for row in all_quizzes:
+            quiz_id, title, description = row
+            if quiz_id in found_ids:
+                continue  # Éviter les doublons déjà trouvés via SQL
 
-                traiter.append({
+            cursor.execute(
+                "SELECT question FROM questions WHERE quiz_id = ?", (quiz_id,))
+            questions = [q[0] for q in cursor.fetchall()]
+
+            match = False
+            if "titles" in filters and chercher_bert(search_text, title, model_mr):
+                match = True
+            elif "descriptions" in filters and chercher_bert(search_text, description, model_mr):
+                match = True
+            elif "questions" in filters:
+                for q in questions:
+                    if chercher_bert(search_text, q, model_mr):
+                        match = True
+                        break
+            elif "all" in filters or not filters:
+                if (chercher_bert(search_text, title, model_mr) or
+                    chercher_bert(search_text, description, model_mr) or
+                        any(chercher_bert(search_text, q, model_mr) for q in questions)):
+                    match = True
+
+            if match:
+                print(f"✅ Ajout par BERT : {title}")
+                results.append({
                     "id": quiz_id,
                     "title": title,
-                    "description": description,
-                    "questions": questions_formatted
+                    "description": description
                 })
-
-            for quiz in traiter:
-                match = False
-                if "titles" in filters and chercher_bert(search_text, quiz['title'], model_mr):
-                    match = True
-                elif "descriptions" in filters and chercher_bert(search_text, quiz['description'], model_mr):
-                    match = True
-                elif "questions" in filters:
-                    for question in quiz['questions']:
-                        if chercher_bert(search_text, question['question'], model_mr):
-                            match = True
-                            break
-                elif "all" in filters or not filters:
-                    if (chercher_bert(search_text, quiz['title'], model_mr) or
-                        chercher_bert(search_text, quiz['description'], model_mr) or
-                            any(chercher_bert(search_text, q['question'], model_mr) for q in quiz['questions'])):
-                        match = True
-
-                if match and quiz['id'] not in found_ids:
-                    results.append({
-                        "id": quiz['id'],
-                        "title": quiz['title'],
-                        "description": quiz['description']
-                    })
-                    found_ids.add(quiz['id'])
+                found_ids.add(quiz_id)
 
         conn.close()
-        return jsonify({"results": results})  # Retour explicite
+        return jsonify({"results": results})
 
     except sqlite3.Error as e:
         print("❌ Erreur SQL:", e)
@@ -981,7 +1020,7 @@ def get_game_details(game_id):
             return jsonify({"error": "Game not found"}), 404
         game = dict(game)
 
-        # Questions du quiz
+        # Questions du quiz (sans doublons)
         cursor.execute('''
             SELECT DISTINCT q.id, q.question, q.type, q.correct_answer
             FROM questions q
@@ -989,17 +1028,17 @@ def get_game_details(game_id):
         ''', (game['quiz_id'],))
         questions = [dict(row) for row in cursor.fetchall()]
 
-        # Joueurs (host déjà exclu à l’enregistrement dans game_players)
+        # Joueurs (sans l'hôte)
         cursor.execute('''
             SELECT DISTINCT u.id as user_id, u.username, gp.score
             FROM game_players gp
             JOIN users u ON gp.user_id = u.id
-            WHERE gp.game_id = ?
+            WHERE gp.game_id = ? AND u.id != ?
             ORDER BY gp.score DESC
-        ''', (game_id,))
+        ''', (game_id, game['host_id']))
         players = [dict(row) for row in cursor.fetchall()]
 
-        # Statistiques des réponses par question
+        # Statistiques des réponses
         for question in questions:
             cursor.execute('''
                 SELECT 
@@ -1007,8 +1046,8 @@ def get_game_details(game_id):
                     SUM(CASE WHEN a.is_correct THEN 1 ELSE 0 END) as correct_count,
                     SUM(CASE WHEN NOT a.is_correct THEN 1 ELSE 0 END) as incorrect_count
                 FROM answers a
-                WHERE a.game_id = ? AND a.question_id = ?
-            ''', (game_id, question['id']))
+                WHERE a.game_id = ? AND a.question_id = ? AND a.user_id != ?
+            ''', (game_id, question['id'], game['host_id']))
             stats = cursor.fetchone()
             question.update({
                 'correct_count': stats['correct_count'] or 0,
@@ -1016,20 +1055,14 @@ def get_game_details(game_id):
                 'total_answers': stats['total_answers'] or 0
             })
 
-        # Réponses ouvertes
+        # Réponses ouvertes (sans l'hôte)
         cursor.execute('''
-            SELECT 
-                a.question_id, 
-                u.id as user_id, 
-                u.username, 
-                a.answer_text
+            SELECT DISTINCT a.question_id, u.id as user_id, u.username, a.answer_text, a.is_correct
             FROM answers a
             JOIN users u ON a.user_id = u.id
             JOIN questions q ON a.question_id = q.id
-            WHERE a.game_id = ? 
-              AND q.type = 'open_question'
-            ORDER BY a.question_id
-        ''', (game_id,))
+            WHERE a.game_id = ? AND q.type = 'open_question' AND a.user_id != ?
+        ''', (game_id, game['host_id']))
         open_answers = [dict(row) for row in cursor.fetchall()]
 
         return jsonify({
@@ -1044,7 +1077,6 @@ def get_game_details(game_id):
             "questions": questions,
             "open_answers": open_answers
         })
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     finally:
@@ -1106,7 +1138,8 @@ def send_preparation(room_code):
 
     socketio.emit('preparing_next', {
         'question_number': current_q + 1,
-        'total_questions': len(room['questions'])
+        'total_questions': len(room['questions']),
+        'questions': room['questions']
     }, room=room_code)
 
 
@@ -1114,6 +1147,9 @@ def send_question(room_code):
     room = active_rooms[room_code]
     current_q = room['current_question']
     question = room['questions'][current_q]
+
+    # ✅ Stocke le timestamp pour calcul des points
+    room['question_start_time'] = time.time()
 
     print(f"[DEBUG] Sending question {current_q + 1} to room {room_code}")
 
@@ -1176,8 +1212,6 @@ def send_question(room_code):
 
     timers[room_code] = socketio.start_background_task(
         start_timer, room_code, question.get('time_limit', 15))
-
-    room['question_start_time'] = time.time()
 
 
 # Socket events

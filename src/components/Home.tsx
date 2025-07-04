@@ -84,6 +84,8 @@ const Home: React.FC = () => {
     }
   };
 
+
+
   const handleCreateRoom = async () => {
     if (!selectedQuiz) {
       setError('Please select a quiz first');
@@ -365,10 +367,14 @@ const Home: React.FC = () => {
       {user && (
         <DocumentQuizModal
           isOpen={showDocumentModal}
-          onClose={() => setShowDocumentModal(false)}
+          onClose={() => {
+            setShowDocumentModal(false);
+            fetchQuizzes(); // ✅ Rafraîchit la liste des quiz à la fermeture du modal
+          }}
           userId={user.id}
         />
       )}
+
     </div>
   );
 };

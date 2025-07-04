@@ -17,10 +17,14 @@ def initialize_easyocr():
         return None
     return reader
 
+
 reader = initialize_easyocr()
+
 
 def search_and_display_images(search_query):
     retry = 0
+    results = []  # Ajouté pour éviter l'erreur
+
     while retry < 3:
         try:
             results = DDGS().images(
@@ -38,17 +42,17 @@ def search_and_display_images(search_query):
             else:
                 raise e
 
-    images = []
-    for result in results:
-        image_url = result['image']
-        images.append(image_url)
+    if not results:
+        print(f"Aucune image trouvée pour : {search_query}")
+        return []
 
+    images = [result['image'] for result in results]
     return images
 
 
 def is_bad_image(image_url):
     try:
-        response = httpx.get(image_url, timeout=5,follow_redirects=True)
+        response = httpx.get(image_url, timeout=5, follow_redirects=True)
         if response.status_code != 200:
             print(f"Erreur HTTP : {response.status_code}")
             return True
@@ -83,8 +87,6 @@ def is_bad_image(image_url):
         return True
 
 
-
-
 def filtrer(images):
     if not images:
         return None
@@ -95,12 +97,13 @@ def filtrer(images):
     toClean = [img for img in toClean if not is_bad_image(img)]
 
     if not toClean:
-        img = secours  
+        img = secours
     else:
         secours = toClean[-1]
         toClean = toClean[:-1]
 
-        toClean = [img for img in toClean if img.endswith('.jpg') or img.endswith('.png')]
+        toClean = [img for img in toClean if img.endswith(
+            '.jpg') or img.endswith('.png')]
 
         if not toClean:
             img = secours
@@ -108,9 +111,3 @@ def filtrer(images):
             img = random.choice(toClean)
 
     return img
-
-
-
-
-
-

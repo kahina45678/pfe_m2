@@ -31,7 +31,7 @@ const QuizList: React.FC = () => {
   const totalPages = Math.ceil(quizzes.length / quizzesPerPage);
 
 
-  useEffect(() => {
+  const fetchQuizzes = () => {
     if (!user) return;
 
     console.log("📡 Fetching quizzes for user:", user.id);
@@ -41,7 +41,12 @@ const QuizList: React.FC = () => {
         setQuizzes(response.data.quizzes);
       })
       .catch(error => console.error("❌ Error loading quizzes:", error));
+  };
+
+  useEffect(() => {
+    fetchQuizzes();
   }, [user]);
+
 
   // Reset le succès de la traduction après 3 secondes
   useEffect(() => {
@@ -247,32 +252,13 @@ const QuizList: React.FC = () => {
                       <FaTrash />
                     </button>
 
-                    <div className="relative">
-                      <button
-                        onClick={() => handleToggleMenu(quiz.id)}
-                        className="text-[#E71722] hover:text-[#C1121F]"
-                        title="Options"
-                      >
-                        <BsThreeDotsVertical />
-                      </button>
-
-                      {openMenuId === quiz.id && (
-                        <div className="absolute right-0 top-8 bg-white border shadow-md rounded z-10 text-sm w-32">
-                          <Link to={`/quizzes/edit/${quiz.id}`} className="block px-4 py-2 hover:bg-gray-100">
-                            Edit
-                          </Link>
-                          <Link to={`/quizzes/duplicate/${quiz.id}`} className="block px-4 py-2 hover:bg-gray-100">
-                            Duplicate
-                          </Link>
-                          <button
-                            onClick={() => handleTranslate(quiz.id)}
-                            className="block px-4 py-2 hover:bg-gray-100 w-full text-left"
-                          >
-                            Translate
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <button
+                      onClick={() => handleTranslate(quiz.id)}
+                      title="Translate quiz"
+                      className="text-gray-600 hover:text-[#E71722] transition-colors"
+                    >
+                      🌍
+                    </button>
                   </div>
                 </div>
               </motion.li>

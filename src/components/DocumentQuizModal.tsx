@@ -170,8 +170,8 @@ const DocumentQuizModal: React.FC<Props> = ({ isOpen, onClose, userId, onQuizCre
                       required
                     >
                       <option value="MCQ">Multiple Choice</option>
-                      <option value="True/False">True/False</option>
-                      <option value="Free Text">Open Questions</option>
+                      <option value="true_false">True/False</option>
+                      <option value="Open">Open Questions</option>
                     </select>
                   </div>
 

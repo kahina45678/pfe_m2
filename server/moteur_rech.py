@@ -49,16 +49,15 @@ def charger_mots(filename="C:/Users/hp/Desktop/Kahoot/QuizMaster/server/words_as
 
 
 def init_model_recherche():
-
     model_bert = SentenceTransformer('all-MiniLM-L6-v2')
     return model_bert
 
 
-def chercher_bert(mot, texte, model_bert, seuil=0.4):
+def chercher_bert(mot, texte, model_bert, seuil=0.30):
     emb_mot = model_bert.encode(mot, convert_to_tensor=True)
     emb_texte = model_bert.encode(texte, convert_to_tensor=True)
 
     similarite = util.cos_sim(emb_mot, emb_texte).item()
+    print(f"Similarité entre '{mot}' et '{texte}' : {similarite}")
 
-    if similarite >= seuil:
-        return True
+    return similarite >= seuil

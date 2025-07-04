@@ -19,26 +19,25 @@ def load_mistral_from_ollama():
     return Ollama(model="mistral")
 
 
-
 def init_vectorstore(file):
     loader = PyPDFLoader(file)
     documents = loader.load()
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000, chunk_overlap=200)
     texts = splitter.split_documents(documents)
 
-    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2")
 
     if os.path.exists("index.faiss"):
-        vectorstore = FAISS.load_local("index", embeddings, allow_dangerous_deserialization=True)
+        vectorstore = FAISS.load_local(
+            "index", embeddings, allow_dangerous_deserialization=True)
     else:
         vectorstore = FAISS.from_documents(texts, embeddings)
         vectorstore.save_local("index")
 
     retriever = vectorstore.as_retriever(search_kwargs={"k": 3})
     return retriever
-
-
-
 
 
 # Prompt template for Multiple Choice Questions (MCQ)
@@ -60,9 +59,9 @@ Answer: [Correct option letter]
 Ensure the questions and options are factually correct based on the context.
 """
 
-# Prompt template for Free Text Questions (Short Answer)
+# Prompt template for Open Questions (Short Answer)
 FREETEXT_PROMPT_TEMPLATE = """
-Use the following context to generate {nb_qst} {difficulty}-level {subject} free text (short answer) questions.
+Use the following context to generate {nb_qst} {difficulty}-level {subject} Open (short answer) questions.
 Provide the expected answer based *strictly* on the context for each question.
 
 Context:
@@ -93,13 +92,14 @@ Ensure the statements and answers are factually correct based on the context.
 # Dictionary to map question types to templates
 PROMPT_TEMPLATES = {
     "MCQ": MCQ_PROMPT_TEMPLATE,
-    "Free Text": FREETEXT_PROMPT_TEMPLATE,
+    "Open": FREETEXT_PROMPT_TEMPLATE,
     "True/False": TRUEFALSE_PROMPT_TEMPLATE,
 }
 
 # --- Quiz Generation Function ---
 
-def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str = "MCQ",retriever=None, llm=None):
+
+def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str = "MCQ", retriever=None, llm=None):
     """
     Generates quiz questions of a specified type, difficulty, and subject
     based on retrieved document context.
@@ -108,7 +108,7 @@ def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str
         difficulty (str): The difficulty level (e.g., "easy", "medium", "hard").
         subject (str): The subject area for the questions.
         nb_qst (int): The number of questions to generate.
-        question_type (str): The type of question ("MCQ", "Free Text", "True/False").
+        question_type (str): The type of question ("MCQ", "Open", "True/False").
                              Defaults to "MCQ".
 
     Returns:
@@ -127,19 +127,19 @@ def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str
         docs = retriever.get_relevant_documents(f"{subject} {difficulty}")
         context = "\n\n".join([doc.page_content for doc in docs])
         if not context:
-             print(f"⚠️ Warning: No relevant context found for subject '{subject}' and difficulty '{difficulty}'. LLM will rely on general knowledge.")
-             # Decide how to handle no context - either return error or let LLM hallucinate/use general knowledge
-             # For strict context-based questions, returning an error might be better
-             # return f"❌ Error: No relevant context found for subject '{subject}' and difficulty '{difficulty}'. Cannot generate quiz based on document."
-             # If you allow general knowledge:
-             # context = "No specific context from the document is available for this query." # Or just use the empty string
+            print(
+                f"⚠️ Warning: No relevant context found for subject '{subject}' and difficulty '{difficulty}'. LLM will rely on general knowledge.")
+            # Decide how to handle no context - either return error or let LLM hallucinate/use general knowledge
+            # For strict context-based questions, returning an error might be better
+            # return f"❌ Error: No relevant context found for subject '{subject}' and difficulty '{difficulty}'. Cannot generate quiz based on document."
+            # If you allow general knowledge:
+            # context = "No specific context from the document is available for this query." # Or just use the empty string
 
         print("🔍 CONTEXTE UTILISÉ POUR LE PROMPT (first 500 chars):")
         print(context[:500], "...")
 
     except Exception as e:
         return f"❌ Error during document retrieval: {e}"
-
 
     # --- THIS BLOCK MUST BE INSIDE THE FUNCTION ---
     # Select the appropriate prompt template string
@@ -169,7 +169,7 @@ def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str
             "nb_qst": nb_qst
         })
         print("📢 LLM Chain executed successfully.")
-        return result # Return the result here
+        return result  # Return the result here
     except Exception as e:
         return f"❌ Error during LLM chain execution: {e}"
     # --- END OF BLOCK THAT MUST BE INSIDE FUNCTION ---
@@ -188,11 +188,11 @@ def generate_quiz(difficulty: str, subject: str, nb_qst: int, question_type: str
 #     print("Skipping quiz generation due to initialization errors.")
 
 
-# # Example 2: Generate 2 medium Free Text questions about "gestion"
-# print("\n--- Generating 2 Medium Free Text about Gestion ---")
+# # Example 2: Generate 2 medium Open questions about "gestion"
+# print("\n--- Generating 2 Medium Open about Gestion ---")
 # if llm is not None and retriever is not None:
-#     quiz_freetext = generate_quiz("medium", "gestion", 2, "Free Text")
-#     print("📢 Résultat Free Text:\n", quiz_freetext)
+#     quiz_freetext = generate_quiz("medium", "gestion", 2, "Open")
+#     print("📢 Résultat Open:\n", quiz_freetext)
 # else:
 #      print("Skipping quiz generation due to initialization errors.")
 
